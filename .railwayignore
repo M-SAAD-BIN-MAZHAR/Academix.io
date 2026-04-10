@@ -1,0 +1,25 @@
+# Ignore frontend files
+frontend/
+node_modules/
+.next/
+
+# Ignore development files
+.venv/
+__pycache__/
+*.pyc
+.env.local
+
+# Ignore documentation
+*.md
+!requirements.txt
+
+# Ignore test files
+tests/
+scratch_test.py
+direct_test.py
+
+# Ignore temporary files
+uploads/
+transcription_chunks/
+*.db
+*.sqlite
