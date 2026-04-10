@@ -103,307 +103,411 @@ numerical_methods_task:
 notes_creation_task:
   description: >
     You are a senior academic writer with 20+ years of experience producing
-    graduate-level lab reports. Your output must be indistinguishable from
-    the work of a meticulous human student. Read every instruction below
-    before writing a single word.
+    doctoral-level engineering lab reports. Every word you write must pass as
+    the genuine work of a meticulous, knowledgeable human student. Do not begin
+    writing until all three preparatory phases are complete.
 
-    ═══════════════════════════════════════════════════════
-    PHASE 1 — DATA EXTRACTION (do this FIRST, before writing)
-    ═══════════════════════════════════════════════════════
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 1 — MANDATORY DATA EXTRACTION  (execute before anything else)
+    ════════════════════════════════════════════════════════════════════════
 
-    From code_execution_task context, extract and store:
-      A) FULL_CODE      — the complete, unmodified source code
-      B) FULL_OUTPUT    — the complete terminal/console output, verbatim
-      C) EXPERIMENT_TOPIC — the subject (e.g., "semaphore-based mutual exclusion")
+    From the output of code_execution_task, extract and STORE these three
+    variables. They will be referenced throughout every section below.
 
-    If either A or B is missing, STOP and report the missing data.
-    Do NOT proceed with placeholders. Never fabricate output.
+      FULL_CODE     = the complete, unmodified source code, character-perfect.
+      FULL_OUTPUT   = the complete terminal/console output, byte-perfect.
+      EXPERIMENT_TOPIC = the subject in 3–6 words (e.g. "POSIX semaphore
+                         mutual exclusion producer consumer").
 
-    ═══════════════════════════════════════════════════════
-    PHASE 2 — CITATION RETRIEVAL
-    ═══════════════════════════════════════════════════════
+    ABORT RULE: If FULL_CODE or FULL_OUTPUT cannot be extracted, halt
+    immediately and output only: "ERROR: Prerequisite data missing —
+    code_execution_task did not provide [FULL_CODE / FULL_OUTPUT]."
+    Never substitute a placeholder. Never fabricate output. Never proceed.
 
-    Call CitationFinder with EXPERIMENT_TOPIC as the query.
-    Retrieve exactly 4–5 real, verifiable academic sources.
-    Store them as CITATIONS.
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 2 — CITATION RETRIEVAL  (execute before writing)
+    ════════════════════════════════════════════════════════════════════════
 
-    Do NOT fabricate titles, authors, journal names, DOIs, or years.
-    If CitationFinder returns fewer than 4 results, call it again
-    with a broader query variant. Never guess or hallucinate references.
+    Call CitationFinder(query=EXPERIMENT_TOPIC).
+    Collect exactly 4–5 results. Store as CITATIONS[1..5].
+    Each citation must be real, verifiable, and complete:
+      - Author names, article/book title, journal or publisher,
+        volume, issue, page range, year, DOI or ISBN.
+    If fewer than 4 results return, call CitationFinder again with a
+    broader 2–3 word query variant. Repeat until 4–5 are secured.
+    NEVER guess, invent, or partially fill any citation field.
 
-    ═══════════════════════════════════════════════════════
-    PHASE 3 — WRITE THE REPORT
-    ═══════════════════════════════════════════════════════
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 3 — DOCUMENT ASSEMBLY
+    ════════════════════════════════════════════════════════════════════════
 
-    Use memory_context {memory_context} for any student/course details.
-    Write every section in full. Output the complete Markdown document.
+    Read memory_context {memory_context} for student name, university,
+    course code, and instructor. If any field is absent, leave the table
+    cell blank — do not guess.
 
-    ─────────────────────────────────────────────────────
+    ─────────────────────────────────────────────────────────────────────
     DOCUMENT HEADER
-    ─────────────────────────────────────────────────────
+    ─────────────────────────────────────────────────────────────────────
 
-    # [Descriptive Experiment Title — inferred from EXPERIMENT_TOPIC]
+    Output this header block verbatim, substituting each bracketed value:
 
-    | Field       | Value                                      |
-    |-------------|--------------------------------------------|
-    | University  | [University Name from memory_context]      |
-    | Course      | [Course Name and Code from memory_context] |
-    | Experiment  | [Experiment Title]                         |
-    | Student     | [Student Name from memory_context]         |
-    | Date        | [Today's date, formatted: DD Month YYYY]   |
-    | Instructor  | [Instructor Name from memory_context]      |
+    # [Full Descriptive Experiment Title — infer from EXPERIMENT_TOPIC]
+
+    | Field        | Detail                                           |
+    |:-------------|:-------------------------------------------------|
+    | University   | [from memory_context]                            |
+    | Department   | [from memory_context]                            |
+    | Course       | [Course Name — Course Code from memory_context]  |
+    | Experiment   | [Experiment Title]                               |
+    | Student      | [from memory_context]                            |
+    | Student ID   | [from memory_context if available]               |
+    | Instructor   | [from memory_context]                            |
+    | Date         | [DD Month YYYY — today]                          |
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ─────────────────────────────────────────────────────────────────────
     TABLE OF CONTENTS
-    ─────────────────────────────────────────────────────
+    ─────────────────────────────────────────────────────────────────────
 
     ## Table of Contents
 
-    1. Objective
-    2. Theory and Background
-    3. Methodology
-    4. Implementation
-    5. Results and Analysis
-    6. Discussion
-    7. Conclusion
-    8. References
+    1. [Objective](#1-objective)
+    2. [Theory and Background](#2-theory-and-background)
+    3. [Methodology](#3-methodology)
+    4. [Implementation](#4-implementation)
+    5. [Results and Analysis](#5-results-and-analysis)
+    6. [Discussion](#6-discussion)
+    7. [Conclusion](#7-conclusion)
+    8. [References](#8-references)
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 1 — OBJECTIVE
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 1. Objective
 
-    REQUIREMENTS:
-    - Exactly 2–3 sentences.
-    - State what was implemented, what was demonstrated, and what is measured.
-    - Be specific: name the algorithm, data structure, OS primitive, or concept.
-    - Do NOT use filler phrases: "The aim of this experiment is to..."
-      "This lab seeks to..." — these are forbidden.
-    - Example of acceptable tone:
-      "This experiment implements a bounded-buffer producer-consumer system
-      using POSIX semaphores to demonstrate mutual exclusion and process
-      synchronisation in a multi-threaded Linux environment."
+    Write exactly 2–3 sentences. All three requirements below must be met
+    simultaneously in these sentences:
+      REQ-1: Name the specific algorithm, OS primitive, or data structure.
+      REQ-2: State what was implemented and in what environment/language.
+      REQ-3: Identify what behaviour or property is demonstrated/measured.
+
+    Sentence rhythm: lead with implementation → follow with demonstration.
+    BANNED openers: "The aim", "This lab", "This experiment aims",
+    "The purpose", "The goal", "This report", "We aim", "This study".
+
+    STRONG EXAMPLE (use this rhythm, not this content):
+      "A bounded-buffer producer-consumer system was implemented in C using
+      POSIX semaphores (`sem_wait`, `sem_post`) to enforce mutual exclusion
+      and synchronise concurrent threads on Ubuntu 22.04 LTS. The experiment
+      measures deadlock-free throughput under varying producer-to-consumer
+      ratios and validates the theoretical semaphore invariant S >= 0."
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 2 — THEORY AND BACKGROUND
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 2. Theory and Background
 
-    REQUIREMENTS:
-    - Minimum 5 substantial paragraphs. No bullet points anywhere in this section.
-    - Write in the style of an undergraduate operating systems or algorithms
-      textbook — authoritative, clear, flowing prose.
-    - Each paragraph must cover one of these angles (adapt to the topic):
-        P1: Core definition — formal, precise. Include etymology if meaningful.
-        P2: Mechanism — how it operates internally at the OS/hardware/algorithm level.
-        P3: Mathematical or logical foundations — include formal notation, equations,
-            or pseudocode where the concept has quantifiable properties.
-        P4: Historical context or evolution — who introduced it, when, and why.
-        P5: Real-world applications — where this is used in production systems today.
-        P6 (optional): Comparison with a related concept — distinguish clearly.
-    - Never use these phrases (they signal AI text):
-        "It is worth noting that", "It should be noted", "It is important to",
-        "This experiment aims to", "Delve into", "In today's world",
-        "In the realm of", "Furthermore,", "Moreover,", "Additionally,",
-        "In conclusion,", "To summarise,", "Firstly,", "Secondly,".
-    - Vary sentence length: mix short declarative sentences with complex ones.
-    - Use active voice preferentially. Passive voice is acceptable for describing
-      established facts or system behaviours, not as a default.
-    - Cite at least 2 of your CITATIONS inline using IEEE numbered format [1].
+    STRUCTURE: Write exactly 6 paragraphs in this order. Each paragraph
+    must be 5–10 sentences. No bullet points. No sub-headings within
+    this section. Pure flowing academic prose throughout.
+
+    P1 — DEFINITION & ETYMOLOGY
+      Provide a formal, precise definition. Include the etymology of the
+      key term if non-trivial. Define all notation used later. Cite [N].
+
+    P2 — INTERNAL MECHANISM
+      Explain how the concept operates at the OS, hardware, or algorithmic
+      level. Describe data structures, system calls, or execution steps
+      involved. Be technical and specific.
+
+    P3 — MATHEMATICAL / LOGICAL FOUNDATIONS
+      Present formal notation, invariants, or equations central to the
+      concept. For example, for semaphores write the P and V operations
+      using proper notation on a SINGLE line each — NOT inside LaTeX
+      display-math \[ ... \] blocks (these break spacing in Markdown).
+      Use a plain fenced code block instead:
+      P(S): S := S - 1   (block process if S < 0 after decrement)
+      V(S): S := S + 1   (wake one waiting process if S <= 0 before increment)
+      Or use inline code: `P(S) = S - 1` for short expressions inline.
+
+    P4 — HISTORICAL CONTEXT
+      Identify who introduced the concept, when, and the original problem
+      it solved. Describe how the concept evolved to its modern form.
+      Cite the foundational source [N].
+
+    P5 — REAL-WORLD APPLICATIONS
+      Name 3–4 specific production systems or standards that rely on this
+      concept (e.g. Linux kernel, POSIX standard, Java JVM, database engines).
+      For each, give one concrete detail about how it is used.
+
+    P6 — CONTRAST WITH RELATED CONCEPT
+      Compare with the nearest alternative (e.g. semaphore vs mutex,
+      fork vs thread, BFS vs DFS). Show precisely where they differ in
+      behaviour, overhead, and appropriate use cases. Cite [N].
+
+    BANNED phrases (instant fail if any appear):
+      "It is worth noting" | "It should be noted" | "It is important to"
+      "In today's world" | "In the realm of" | "Furthermore" | "Moreover"
+      "Additionally" | "Delve into" | "Leverage" | "Firstly/Secondly"
+      "As we can see" | "Clearly," | "Obviously," | "Simply put,"
+
+    MANDATORY: Cite at least 2 of CITATIONS[1..5] inline as [1], [2], etc.
+    Place citations at the end of the sentence they support, before the period.
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 3 — METHODOLOGY
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 3. Methodology
 
-    REQUIREMENTS:
-    - Use a numbered list of steps (1, 2, 3...).
-    - Each step must contain two parts:
-        WHAT was done + WHY that decision was made.
-    - Cover all of: environment setup, language/library selection rationale,
-      algorithm or design decisions, testing strategy, validation approach.
-    - Minimum 6 steps. Each step is 2–4 sentences.
-    - Be specific: name the OS, compiler/interpreter version, library versions,
-      and any relevant flags or parameters used.
-    - Do not simply describe the code — describe the engineering decisions
-      made before and during implementation.
+    Write exactly 7 numbered steps. Each step uses this rigid structure:
+
+      N. **[Concise step title]**
+         WHAT: [1–2 sentences stating the action taken.]
+         WHY:  [1–2 sentences justifying the engineering decision.]
+
+    Cover these seven topics in order:
+      1. Execution environment — OS name + version, CPU architecture
+      2. Language & toolchain — compiler/interpreter, version, compilation flags
+      3. Library selection — which libraries and why those specifically
+      4. Algorithm / design approach — key design decision and its rationale
+      5. Input / parameter configuration — how test parameters were chosen
+      6. Testing and edge-case strategy — what edge cases were tested and why
+      7. Output validation approach — how correctness was confirmed
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 4 — IMPLEMENTATION
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 4. Implementation
 
-    REQUIREMENTS:
-    - Open with 1 paragraph (3–5 sentences) summarising the design:
-      overall architecture, major components, and key decisions.
-    - Then insert FULL_CODE exactly as extracted, inside a fenced code block
-      with the correct language identifier (triple backticks with language name).
-      Example: ```python followed by code, then closing triple backticks.
-      [FULL_CODE here — unmodified, complete, nothing omitted]
-    - After the code block, add a "Code Walkthrough" subsection using
-      ### Code Walkthrough
-      Walk through each logical section of the code with 1–3 sentences per section.
-      Do not repeat line numbers; describe what each block accomplishes and why
-      it is structured that way.
-    - Never summarise, abbreviate, or paraphrase the code. It must be complete.
-    - Never write "[code here]", "[see above]", or any other placeholder.
+    4A. DESIGN OVERVIEW (1 paragraph, 4–6 sentences)
+      Describe the overall architecture: major components, their
+      responsibilities, and how they interact. Name every significant
+      function or class. Do not describe line numbers.
+
+    4B. SOURCE CODE
+      Insert FULL_CODE verbatim inside a fenced code block with the
+      correct language tag. The code must be byte-perfect — no
+      truncation, no paraphrase, no ellipsis ("..."), no "[rest of code]".
+      
+      Example format:
+      
+      ```python
+      [FULL_CODE — inserted exactly as extracted in Phase 1]
+      ```
+
+    4C. ### Code Walkthrough
+      Walk through the code in logical blocks, NOT line by line.
+      For each logical block write 2–4 sentences:
+        — what the block does
+        — why it is structured that way
+        — any non-obvious design choice
+      One paragraph per distinct logical block.
+      Minimum 4 walkthrough paragraphs; maximum 8.
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 5 — RESULTS AND ANALYSIS
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 5. Results and Analysis
 
-    REQUIREMENTS:
-    - Open with 1 sentence contextualising the execution environment
-      (OS, hardware, date/time if relevant).
-    - Insert FULL_OUTPUT exactly as extracted, inside a fenced code block
-      (triple backticks without language identifier for raw terminal output).
-      [FULL_OUTPUT here — verbatim, unmodified, complete]
-    - If DataVizTool returned any markdown image references or chart embeds,
-      insert them directly after the output block so they render inline.
-    - After the output block, write 3–5 paragraphs of analysis:
-        - What does each part of the output demonstrate?
-        - Does the output confirm theoretical expectations? Cite Section 2.
-        - Identify any specific values, timings, or counts in the output
-          and explain their significance.
-    - If the output contains measurable data (times, counts, sizes), include
-      a comparison or summary table in Markdown format.
-    - Never write "Output will vary", "Results may differ", "Sample output",
-      or any phrase suggesting the output is hypothetical.
-    - Never write "[output here]" or any other placeholder.
+    5A. CONTEXT SENTENCE
+      One sentence naming: OS, hardware, and date of execution.
+
+    5B. RAW OUTPUT
+      Insert FULL_OUTPUT verbatim in a plain code fence (no language tag).
+      Place exactly one blank line before the opening ``` and exactly one
+      blank line after the closing ```. No extra lines inside the fence.
+      
+      Example format:
+      
+      (blank line here)
+      ```
+      [FULL_OUTPUT — inserted exactly as extracted in Phase 1]
+      ```
+      (blank line here)
+      
+    5C. INLINE CHARTS
+      If DataVizTool returned image markdown, insert each image reference
+      on its own line immediately after the code fence.
+
+    5D. ANALYSIS PARAGRAPHS (4–5 paragraphs)
+      Para 1: Walk through the output section by section — what each
+              portion proves about the program's behaviour.
+      Para 2: Verify against theoretical expectations from Section 2.
+              Quote or reference a specific line of FULL_OUTPUT as evidence.
+      Para 3: Interpret specific numeric values (times, counts, sizes).
+              Explain why each value is or is not within expected bounds.
+      Para 4: If measurable data exists, present it as a Markdown table
+              with a caption. Columns must align; no ragged pipes.
+      Para 5 (optional): Note any anomalous or unexpected result and
+              provide a technically grounded explanation.
+
+    BANNED: "Output will vary" | "Results may differ" | "Sample output"
+           "[output here]" | "as shown above" | any hypothetical phrasing
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 6 — DISCUSSION
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 6. Discussion
 
-    REQUIREMENTS:
-    - Exactly 3–4 paragraphs. No bullet points.
-    - Paragraph 1: Interpret the results in relation to the theory from Section 2.
-      Were the results consistent with expectations? If not, explain why.
-    - Paragraph 2: Discuss edge cases, failure modes, or boundary conditions
-      that were encountered or could realistically occur. Be specific.
-    - Paragraph 3: Limitations of the current implementation — what assumptions
-      were made? What does not scale or generalise?
-    - Paragraph 4 (optional): How does this experiment connect to production
-      systems or broader OS/software engineering principles?
-    - This section must reference at least one specific line or value from
-      the actual output (FULL_OUTPUT). Do not discuss results in the abstract.
-    - Maintain critical academic tone — do not be purely celebratory.
+    Write exactly 4 paragraphs. No bullet points. No sub-headings.
+
+      D1 — THEORY ALIGNMENT
+           Compare results against the theoretical model in Section 2.
+           State concretely whether they agree or diverge, and why.
+           Reference a specific value or line from FULL_OUTPUT.
+
+      D2 — EDGE CASES & FAILURE MODES
+           Identify 2–3 boundary conditions relevant to this implementation
+           (e.g. empty buffer, zero threads, integer overflow, starvation).
+           For each, describe the expected failure and how to mitigate it.
+
+      D3 — LIMITATIONS & SCALABILITY
+           State what assumptions the implementation makes.
+           Identify at least one aspect that does not scale or generalise.
+           Use concrete terms (e.g. "assumes a single-machine shared-memory
+           model; distributed scenarios require a different primitive").
+
+      D4 — PRODUCTION RELEVANCE
+           Connect this experiment to a real-world system or industry
+           practice. Name the system. Be specific about the connection.
+           Cite one of CITATIONS[1..5].
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 7 — CONCLUSION
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 7. Conclusion
 
-    REQUIREMENTS:
-    - Exactly 3–4 sentences.
-    - Sentence 1: State what was successfully implemented and demonstrated.
-    - Sentence 2: Summarise the most important finding from the results.
-    - Sentence 3: Suggest one concrete, technically specific direction for
-      future work (not "this could be extended to do more things").
-    - Sentence 4 (optional): A closing reflection on the practical relevance.
-    - Do NOT use: "In conclusion,", "To summarise,", "Overall,", "In summary,".
-    - Do NOT introduce new technical concepts not discussed earlier.
+    Write exactly 4 sentences. No more, no less.
+      S1: What was implemented and demonstrated (past tense, specific).
+      S2: The single most significant finding from FULL_OUTPUT.
+      S3: One concrete, technically specific direction for future work.
+          BAD: "future work could explore more advanced scenarios."
+          GOOD: "Replacing binary semaphores with a priority-inheritance
+                mutex would eliminate the priority-inversion anomaly
+                observed when three high-priority consumers starved."
+      S4: One sentence on broader practical relevance.
+
+    BANNED openers: "In conclusion," | "To summarise," | "Overall,"
+    "In summary," | "As shown," | "This report has shown"
 
     ---
 
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
     SECTION 8 — REFERENCES
-    ─────────────────────────────────────────────────────
+    ══════════════════════════════════════════════════════════════════════
 
     ## 8. References
 
-    REQUIREMENTS:
-    - List all 4–5 entries from CITATIONS in strict IEEE format:
-        [1] A. Author and B. Author, "Title of Paper," *Journal Name*,
-            vol. X, no. Y, pp. ZZZ–ZZZ, Month YYYY. doi: 10.XXXX/XXXXX
-        [2] A. Author, *Book Title*, Nth ed. City, Country: Publisher, YYYY.
-        [3] A. Author, "Title," in *Proc. Conf. Name*, City, Country, YYYY,
-            pp. ZZZ–ZZZ.
-    - Every field (authors, title, venue, year) must be real and verifiable.
-    - Each reference cited inline in Sections 2 and 6 must appear here.
-    - Order references by first appearance in the document, not alphabetically.
-    - No URLs unless the source is a web-only resource (RFC, standard, online doc).
-      If a URL is included, add [Accessed: DD Month YYYY].
+    List CITATIONS[1..5] in IEEE format, ordered by first appearance
+    in the document (not alphabetically). Use these exact templates:
 
-    ---
+    Journal article:
+      [N] A. A. Author and B. B. Author, "Title of article," *Abbrev.
+          Journal Name*, vol. X, no. Y, pp. ZZZ–ZZZ, Mon. YYYY,
+          doi: 10.XXXX/XXXXX.
 
-    ═══════════════════════════════════════════════════════
-    GLOBAL WRITING RULES — apply to every section
-    ═══════════════════════════════════════════════════════
+    Book:
+      [N] A. A. Author, *Book Title*, Nth ed. City, Country:
+          Publisher, YYYY, pp. ZZZ–ZZZ.
 
-    FORBIDDEN PHRASES (auto-fail if any appear):
-      - "It is worth noting"       - "It should be noted"
-      - "This experiment aims to"  - "The purpose of this lab"
-      - "In today's fast-paced"    - "In the realm of"
-      - "Delve into"               - "Leverage" (as a verb)
-      - "Furthermore"              - "Moreover"
-      - "Additionally"             - "In conclusion"
-      - "To summarise"             - "Firstly / Secondly / Thirdly"
-      - "It is important to note"  - "Needless to say"
-      - "[placeholder]"            - "[output here]"
-      - "[code here]"              - "SKIPPED"
-      - "will be shown"            - "would demonstrate"
-      - "As we can see"            - "Clearly,"
-      - "Obviously,"               - "Simply put,"
+    Conference paper:
+      [N] A. A. Author, "Title," in *Proc. Full Conf. Name (ABBR)*,
+          City, Country, YYYY, pp. ZZZ–ZZZ, doi: 10.XXXX/XXXXX.
 
-    FORMATTING RULES:
-      - No emojis anywhere in the document.
-      - Section headings use ## (H2). Sub-headings use ### (H3).
-      - Bold (**text**) only for labels in tables or to highlight a defined
-        technical term on first use. Not for emphasis in prose.
+    Online standard / RFC (only when no print version exists):
+      [N] Standard Body, *Standard Title*, Standard No., Mon. YYYY.
+          [Online]. Available: https://... [Accessed: DD Mon. YYYY].
+
+    VERIFICATION RULE: Every [N] cited inline must appear here.
+    Every entry here must be cited at least once in the body.
+    No orphan references. No orphan inline citations.
+
+    ══════════════════════════════════════════════════════════════════════
+    GLOBAL WRITING STANDARDS — apply to every character of output
+    ══════════════════════════════════════════════════════════════════════
+
+    TYPOGRAPHY & MATH RULES:
+      - NO LaTeX display-math blocks \[ ... \] anywhere in the document.
+        These create extra blank lines and broken spacing in Markdown.
+        Use instead:
+        (a) inline code backticks for short expressions: `P(S) = S - 1`
+        (b) fenced code blocks (``` ... ```) for multi-line equations
       - Inline code (`backticks`) for: variable names, function names,
-        file names, command-line arguments.
-      - All code blocks must have a language identifier (```c, ```python, etc.)
-        except raw terminal output (use plain ``` for that).
-      - Minimum total word count: 1,500 words (excluding code blocks and output).
+        file names, flags, OS commands, and short math expressions.
+      - Bold (**text**) only for: table column headers, step titles in
+        Section 3, and the first introduction of a defined technical term.
+      - No emojis. No decorative Unicode. Horizontal rules (---) only
+        between major sections, never within a section.
 
-    QUALITY GATE — before finalising output, verify:
-      [ ] FULL_CODE appears verbatim in Section 4
-      [ ] FULL_OUTPUT appears verbatim in Section 5
-      [ ] Zero forbidden phrases present
+    SPACING & ALIGNMENT:
+      - One blank line between paragraphs. Never two or more blank lines.
+      - No trailing spaces on any line.
+      - Markdown tables: always include a header row; align column pipes
+        consistently; use :--- for left, :---: for centre, ---: for right.
+      - Code fences: the opening ``` is on its own line; the closing ``` is
+        on its own line; exactly one blank line before and one after the
+        entire fence block; no extra blank lines inside the fence.
+
+    FORBIDDEN PHRASES — auto-fail if any of these appear anywhere:
+      "It is worth noting" | "It should be noted" | "It is important to"
+      "This experiment aims" | "The purpose of this lab" | "Delve into"
+      "In today's fast-paced" | "In the realm of" | "Leverage" (as verb)
+      "Furthermore" | "Moreover" | "Additionally" | "In conclusion"
+      "To summarise" | "Firstly/Secondly/Thirdly" | "Needless to say"
+      "[placeholder]" | "[output here]" | "[code here]" | "SKIPPED"
+      "will be shown" | "would demonstrate" | "As we can see" | "Clearly,"
+      "Obviously," | "Simply put," | "Output will vary" | "Sample output"
+
+    WORD COUNT:
+      Minimum 1,800 words of prose.
+      Code blocks and FULL_OUTPUT are excluded from this count.
+
+    FINAL QUALITY GATE — verify every checkbox before outputting:
+      [ ] FULL_CODE appears verbatim and complete in Section 4
+      [ ] FULL_OUTPUT appears verbatim and complete in Section 5
+      [ ] Zero LaTeX \[ ... \] display-math blocks anywhere in document
+      [ ] Zero double blank lines anywhere in the document
+      [ ] Zero forbidden phrases
       [ ] Zero placeholders of any kind
-      [ ] 4–5 real references in IEEE format in Section 8
-      [ ] Minimum 5 prose paragraphs in Section 2
-      [ ] Minimum 1,500 words outside of code/output blocks
-      [ ] Every inline citation [N] has a matching entry in Section 8
+      [ ] 4–5 real IEEE references, every field verifiable
+      [ ] Section 2 has exactly 6 prose paragraphs, zero bullet points
+      [ ] Section 3 has exactly 7 numbered WHAT+WHY steps
+      [ ] Section 6 has exactly 4 paragraphs, zero bullet points
+      [ ] Section 7 has exactly 4 sentences
+      [ ] Every [N] in body has a matching entry in Section 8
+      [ ] Every entry in Section 8 is cited at least once in the body
+      [ ] Minimum 1,800 prose words (excluding code and output blocks)
 
   expected_output: >
-    A complete, polished academic lab report in Markdown, minimum 1,500 words
-    of prose (code blocks and program output excluded from word count).
-    All 8 sections are present and fully written — no section is skipped,
-    abbreviated, or contains placeholder text of any kind.
-    Section 4 contains the verbatim source code from code_execution_task.
-    Section 5 contains the verbatim program output from code_execution_task.
-    Section 2 reads like a graduate-level textbook passage with a minimum of
-    five paragraphs and zero bullet points.
-    Section 8 contains 4–5 real, IEEE-formatted citations retrieved via
-    CitationFinder — no fabricated or hallucinated references.
-    The document contains zero forbidden phrases, zero emojis, and zero
-    placeholder text.
+    A submission-ready academic lab report in Markdown. All 8 sections
+    present, complete, and free of placeholder text. FULL_CODE appears
+    verbatim in Section 4. FULL_OUTPUT appears verbatim in Section 5.
+    Section 2 contains exactly 6 graduate-level textbook paragraphs with
+    zero bullet points and zero LaTeX display-math blocks. Section 8 lists
+    4–5 real, fully-populated IEEE citations. The document contains zero
+    forbidden phrases, zero extra blank lines, zero emojis, and a minimum
+    of 1,800 words of prose outside code and output blocks.
 
   agent: Elite_Academic_Document_Architect
