@@ -8,6 +8,11 @@ interface Keys {
   openai: string;
   groq: string;
   serper: string;
+  notion_api_key: string;
+  notion_database_id: string;
+  adobe_client_id: string;
+  adobe_client_secret: string;
+  octave_api_key: string;
 }
 
 function KeyField({
@@ -47,14 +52,35 @@ function KeyField({
 }
 
 export default function SettingsPage() {
-  const [keys, setKeys] = useState<Keys>({ openai: "", groq: "", serper: "" });
+  const [keys, setKeys] = useState<Keys>({ 
+    openai: "", 
+    groq: "", 
+    serper: "",
+    notion_api_key: "",
+    notion_database_id: "",
+    adobe_client_id: "",
+    adobe_client_secret: "",
+    octave_api_key: ""
+  });
   const [saved, setSaved] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"checking" | "ok" | "error">("checking");
 
   useEffect(() => {
     const stored = localStorage.getItem("academix_keys");
     if (stored) {
-      try { setKeys({ openai: "", groq: "", serper: "", ...JSON.parse(stored) }); }
+      try { 
+        setKeys({ 
+          openai: "", 
+          groq: "", 
+          serper: "",
+          notion_api_key: "",
+          notion_database_id: "",
+          adobe_client_id: "",
+          adobe_client_secret: "",
+          octave_api_key: "",
+          ...JSON.parse(stored) 
+        }); 
+      }
       catch { /* ignore */ }
     }
     // Check backend health
@@ -171,6 +197,70 @@ export default function SettingsPage() {
           />
         </div>
 
+        {/* Notion Integration */}
+        <div className="glass rounded-2xl p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-white text-sm">Notion Integration</h3>
+            <span className="text-xs text-gray-600">Optional</span>
+          </div>
+
+          <KeyField
+            label="Notion API Key"
+            placeholder="secret_..."
+            value={keys.notion_api_key}
+            onChange={(v) => setKeys({ ...keys, notion_api_key: v })}
+            hint="Save notes directly to Notion — get your integration token from notion.so/my-integrations"
+          />
+          
+          <KeyField
+            label="Notion Database ID"
+            placeholder="32-character database ID or full URL"
+            value={keys.notion_database_id}
+            onChange={(v) => setKeys({ ...keys, notion_database_id: v })}
+            hint="The database where notes will be saved — copy from your Notion database URL"
+          />
+        </div>
+
+        {/* Adobe PDF Services (Optional) */}
+        <div className="glass rounded-2xl p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-white text-sm">Adobe PDF Services</h3>
+            <span className="text-xs text-gray-600">Optional - Enhanced PDF parsing</span>
+          </div>
+
+          <KeyField
+            label="Adobe Client ID"
+            placeholder="your-adobe-client-id..."
+            value={keys.adobe_client_id}
+            onChange={(v) => setKeys({ ...keys, adobe_client_id: v })}
+            hint="For advanced PDF extraction — get credentials from developer.adobe.com"
+          />
+          
+          <KeyField
+            label="Adobe Client Secret"
+            placeholder="your-adobe-client-secret..."
+            value={keys.adobe_client_secret}
+            onChange={(v) => setKeys({ ...keys, adobe_client_secret: v })}
+            hint="Adobe API secret for PDF Services"
+          />
+        </div>
+
+        {/* Octave API (Optional) */}
+        <div className="glass rounded-2xl p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-white text-sm">Octave API</h3>
+            <span className="text-xs text-gray-600">Optional - For Octave/MATLAB code execution</span>
+          </div>
+
+          <KeyField
+            label="Octave API Key"
+            placeholder="your-octave-api-key..."
+            value={keys.octave_api_key}
+            onChange={(v) => setKeys({ ...keys, octave_api_key: v })}
+            hint="Execute Octave/MATLAB code remotely — contact Octave API provider for access"
+          />
+        </div>
+
         {/* Save */}
         <motion.button
           onClick={handleSave}
@@ -195,6 +285,8 @@ export default function SettingsPage() {
               { name: "OpenAI", url: "https://platform.openai.com/api-keys", desc: "GPT-4o-mini — best quality" },
               { name: "Groq", url: "https://console.groq.com/keys", desc: "Llama 3 70B — free tier" },
               { name: "Serper", url: "https://serper.dev", desc: "Google Search API — 2,500 free/month" },
+              { name: "Notion", url: "https://www.notion.so/my-integrations", desc: "Create integration & get API token" },
+              { name: "Adobe PDF Services", url: "https://developer.adobe.com/document-services/apis/pdf-extract/", desc: "Advanced PDF extraction" },
             ].map(({ name, url, desc }) => (
               <a
                 key={name}
@@ -211,6 +303,48 @@ export default function SettingsPage() {
                 <ExternalLink size={14} className="text-gray-600 group-hover:text-violet-400 transition-colors" />
               </a>
             ))}
+          </div>
+        </div>
+
+        {/* Setup Guides */}
+        <div className="glass rounded-2xl p-6 space-y-4">
+          <h3 className="font-semibold text-white text-sm">Setup Guides</h3>
+          
+          <div className="space-y-4 text-sm text-gray-400">
+            <div className="space-y-2">
+              <p className="text-white font-medium">🔑 Required Keys (at least one LLM):</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li><span className="text-violet-400">OpenAI</span> or <span className="text-violet-400">Groq</span> — for AI report generation and chat</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-white font-medium">🔍 Recommended:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li><span className="text-emerald-400">Serper</span> — enables web search for research tasks</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-white font-medium">📝 Notion Integration Setup:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs ml-2">
+                <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank" className="text-violet-400 hover:underline">notion.so/my-integrations</a></li>
+                <li>Click "New integration" and give it a name (e.g., "Academix")</li>
+                <li>Copy the "Internal Integration Token" — this is your API key</li>
+                <li>Open your Notion database, click "..." → "Add connections" → Select your integration</li>
+                <li>Copy the database URL — the 32-character ID is your Database ID</li>
+              </ol>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-white font-medium">📄 Adobe PDF Services (Optional):</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs ml-2">
+                <li>Go to <a href="https://developer.adobe.com" target="_blank" className="text-violet-400 hover:underline">developer.adobe.com</a></li>
+                <li>Create a free account and new project</li>
+                <li>Add "PDF Extract API" to your project</li>
+                <li>Copy Client ID and Client Secret from credentials</li>
+              </ol>
+            </div>
           </div>
         </div>
 

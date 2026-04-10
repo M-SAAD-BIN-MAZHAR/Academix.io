@@ -67,8 +67,31 @@ async def chat(
     x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
     x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
     x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
+        # Apply user-supplied keys to environment
+        if x_openai_key and x_openai_key.strip():
+            os.environ["OPENAI_API_KEY"] = x_openai_key.strip()
+        elif x_groq_key and x_groq_key.strip():
+            os.environ["GROQ_API_KEY"] = x_groq_key.strip()
+        if x_serper_key and x_serper_key.strip():
+            os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
+
         msg_lower = message.lower()
 
         # Identity questions — hardcoded
@@ -130,6 +153,11 @@ async def generate_report(
     x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
     x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
     x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
         file_path = ""
@@ -149,6 +177,16 @@ async def generate_report(
             os.environ["GROQ_API_KEY"] = x_groq_key.strip()
         if x_serper_key and x_serper_key.strip():
             os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
 
         inputs = {
             "topic": user_input[:100],
@@ -192,6 +230,11 @@ async def transcribe(
     x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
     x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
     x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
         if x_openai_key and x_openai_key.strip():
@@ -200,6 +243,16 @@ async def transcribe(
             os.environ["GROQ_API_KEY"] = x_groq_key.strip()
         if x_serper_key and x_serper_key.strip():
             os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
         media_path = None
         if file and file.filename:
             dest = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
