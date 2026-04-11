@@ -111,18 +111,25 @@ notes_creation_task:
     PHASE 1 — MANDATORY DATA EXTRACTION  (execute before anything else)
     ════════════════════════════════════════════════════════════════════════
 
-    From the output of code_execution_task, extract and STORE these three
-    variables. They will be referenced throughout every section below.
-
-      FULL_CODE     = the complete, unmodified source code, character-perfect.
-      FULL_OUTPUT   = the complete terminal/console output, byte-perfect.
-      EXPERIMENT_TOPIC = the subject in 3–6 words (e.g. "POSIX semaphore
-                         mutual exclusion producer consumer").
-
-    ABORT RULE: If FULL_CODE or FULL_OUTPUT cannot be extracted, halt
-    immediately and output only: "ERROR: Prerequisite data missing —
-    code_execution_task did not provide [FULL_CODE / FULL_OUTPUT]."
-    Never substitute a placeholder. Never fabricate output. Never proceed.
+    Check if this is a CODE EXECUTION workflow or LAB REPORT workflow:
+    
+    IF code_execution_task output contains actual code and output:
+      Extract and STORE these three variables:
+        FULL_CODE     = the complete, unmodified source code, character-perfect.
+        FULL_OUTPUT   = the complete terminal/console output, byte-perfect.
+        EXPERIMENT_TOPIC = the subject in 3–6 words (e.g. "POSIX semaphore
+                           mutual exclusion producer consumer").
+      
+      ABORT RULE: If FULL_CODE or FULL_OUTPUT cannot be extracted, halt
+      immediately and output only: "ERROR: Prerequisite data missing —
+      code_execution_task did not provide [FULL_CODE / FULL_OUTPUT]."
+      Never substitute a placeholder. Never fabricate output. Never proceed.
+    
+    ELSE IF lab_report_generation_task output contains a complete lab report:
+      Use the lab report content directly as the final output.
+      Extract EXPERIMENT_TOPIC from the lab report title.
+      Set FULL_CODE and FULL_OUTPUT to empty (not applicable for lab reports).
+      Proceed to PHASE 2 using lab report content instead of code execution.
 
     ════════════════════════════════════════════════════════════════════════
     PHASE 2 — CITATION RETRIEVAL  (execute before writing)
@@ -292,30 +299,36 @@ notes_creation_task:
 
     ## 4. Implementation
 
-    4A. DESIGN OVERVIEW (1 paragraph, 4–6 sentences)
-      Describe the overall architecture: major components, their
-      responsibilities, and how they interact. Name every significant
-      function or class. Do not describe line numbers.
+    IF this is a CODE EXECUTION workflow (FULL_CODE exists):
+      4A. DESIGN OVERVIEW (1 paragraph, 4–6 sentences)
+        Describe the overall architecture: major components, their
+        responsibilities, and how they interact. Name every significant
+        function or class. Do not describe line numbers.
 
-    4B. SOURCE CODE
-      Insert FULL_CODE verbatim inside a fenced code block with the
-      correct language tag. The code must be byte-perfect — no
-      truncation, no paraphrase, no ellipsis ("..."), no "[rest of code]".
-      
-      Example format:
-      
-      ```python
-      [FULL_CODE — inserted exactly as extracted in Phase 1]
-      ```
+      4B. SOURCE CODE
+        Insert FULL_CODE verbatim inside a fenced code block with the
+        correct language tag. The code must be byte-perfect — no
+        truncation, no paraphrase, no ellipsis ("..."), no "[rest of code]".
+        
+        Example format:
+        
+        ```python
+        [FULL_CODE — inserted exactly as extracted in Phase 1]
+        ```
 
-    4C. ### Code Walkthrough
-      Walk through the code in logical blocks, NOT line by line.
-      For each logical block write 2–4 sentences:
-        — what the block does
-        — why it is structured that way
-        — any non-obvious design choice
-      One paragraph per distinct logical block.
-      Minimum 4 walkthrough paragraphs; maximum 8.
+      4C. ### Code Walkthrough
+        Walk through the code in logical blocks, NOT line by line.
+        For each logical block write 2–4 sentences:
+          — what the block does
+          — why it is structured that way
+          — any non-obvious design choice
+        One paragraph per distinct logical block.
+        Minimum 4 walkthrough paragraphs; maximum 8.
+    
+    ELSE IF this is a LAB REPORT workflow (from lab manual):
+      Use the implementation section from the lab_report_generation_task output.
+      Include algorithm descriptions, MATLAB/Octave code, and methodology.
+      Ensure all code is properly formatted in fenced code blocks.
 
     ---
 
@@ -325,40 +338,43 @@ notes_creation_task:
 
     ## 5. Results and Analysis
 
-    5A. CONTEXT SENTENCE
-      One sentence naming: OS, hardware, and date of execution.
+    IF this is a CODE EXECUTION workflow (FULL_OUTPUT exists):
+      5A. CONTEXT SENTENCE
+        One sentence naming: OS, hardware, and date of execution.
 
-    5B. RAW OUTPUT
-      Insert FULL_OUTPUT verbatim in a plain code fence (no language tag).
-      Place exactly one blank line before the opening ``` and exactly one
-      blank line after the closing ```. No extra lines inside the fence.
-      
-      Example format:
-      
-      (blank line here)
-      ```
-      [FULL_OUTPUT — inserted exactly as extracted in Phase 1]
-      ```
-      (blank line here)
-      
-    5C. INLINE CHARTS
-      If DataVizTool returned image markdown, insert each image reference
-      on its own line immediately after the code fence.
+      5B. RAW OUTPUT
+        Insert FULL_OUTPUT verbatim in a plain code fence (no language tag).
+        Place exactly one blank line before the opening ``` and exactly one
+        blank line after the closing ```. No extra lines inside the fence.
+        
+        Example format:
+        
+        (blank line here)
+        ```
+        [FULL_OUTPUT — inserted exactly as extracted in Phase 1]
+        ```
+        (blank line here)
+        
+      5C. INLINE CHARTS
+        If DataVizTool returned image markdown, insert each image reference
+        on its own line immediately after the code fence.
 
-    5D. ANALYSIS PARAGRAPHS (4–5 paragraphs)
-      Para 1: Walk through the output section by section — what each
-              portion proves about the program's behaviour.
-      Para 2: Verify against theoretical expectations from Section 2.
-              Quote or reference a specific line of FULL_OUTPUT as evidence.
-      Para 3: Interpret specific numeric values (times, counts, sizes).
-              Explain why each value is or is not within expected bounds.
-      Para 4: If measurable data exists, present it as a Markdown table
-              with a caption. Columns must align; no ragged pipes.
-      Para 5 (optional): Note any anomalous or unexpected result and
-              provide a technically grounded explanation.
-
-    BANNED: "Output will vary" | "Results may differ" | "Sample output"
-           "[output here]" | "as shown above" | any hypothetical phrasing
+      5D. ANALYSIS PARAGRAPHS (4–5 paragraphs)
+        Para 1: Walk through the output section by section — what each
+                portion proves about the program's behaviour.
+        Para 2: Verify against theoretical expectations from Section 2.
+                Quote or reference a specific line of FULL_OUTPUT as evidence.
+        Para 3: Interpret specific numeric values (times, counts, sizes).
+                Explain why each value is or is not within expected bounds.
+        Para 4: If measurable data exists, present it as a Markdown table
+                with a caption. Columns must align; no ragged pipes.
+        Para 5 (optional): Note any anomalous or unexpected result and
+                provide a technically grounded explanation.
+    
+    ELSE IF this is a LAB REPORT workflow (from lab manual):
+      Use the results and analysis section from the lab_report_generation_task output.
+      Include example outputs, numerical results, graphs, and analysis.
+      Ensure all outputs are properly formatted.
 
     ---
 
