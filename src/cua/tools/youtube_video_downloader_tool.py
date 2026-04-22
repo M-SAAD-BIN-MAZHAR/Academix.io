@@ -542,78 +542,192 @@ class StreamingTranscriptionManager:
             try: os.remove(f)
             except: pass
 
-        # Prepare ffmpeg command
-        # resample to 16kHz, mono, segment every X seconds
-        ffmpeg_cmd = [
-            "ffmpeg", "-i", "pipe:0" if is_url else source,
+        if is_url:
+            # Try multiple strategies for URL-based transcription
+            return self._transcribe_from_url(source, start_time)
+        else:
+            # Local file transcription
+            return self._transcribe_from_file(source, start_time)
+    
+    def _transcribe_from_url(self, source: str, start_time: float) -> str:
+        """Handle URL-based transcription with multiple fallback strategies"""
+        strategies = [
+            ("direct_stream", "Direct streaming with cookies"),
+            ("download_first", "Download then transcribe"),
+            ("alternative_extractor", "Alternative extraction method")
+        ]
+        
+        last_error = None
+        
+        for strategy_name, strategy_desc in strategies:
+            try:
+                logger.info(f"Trying strategy: {strategy_desc}")
+                
+                if strategy_name == "direct_stream":
+                    return self._direct_stream_strategy(source, start_time)
+                elif strategy_name == "download_first":
+                    return self._download_first_strategy(source, start_time)
+                elif strategy_name == "alternative_extractor":
+                    return self._alternative_extractor_strategy(source, start_time)
+                    
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Strategy '{strategy_name}' failed: {str(e)}")
+                continue
+        
+        # All strategies failed
+        if self.bypass_manager:
+            error_msg = self.bypass_manager.get_user_friendly_error(last_error, 3)
+            return f"Transcription failed after trying multiple strategies: {error_msg}"
+        else:
+            return f"Multimedia Critical Error: All transcription strategies failed. Last error: {str(last_error)}"
+    
+    def _direct_stream_strategy(self, source: str, start_time: float) -> str:
+        """Original direct streaming strategy"""
+        # Get yt-dlp options (with bypass if available)
+        if self.bypass_manager:
+            ydl_opts = self.bypass_manager.get_ydl_options(attempt=0)
+            logger.info(f"Starting YouTube download with bot bypass: {source}")
+        else:
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+            }
+        
+        # Extract audio URL with retry logic
+        audio_url = self._extract_youtube_audio_url(source, ydl_opts)
+        
+        # Use 4 threads for parallel transcription
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            monitor_thread = threading.Thread(target=self.monitor_chunks, args=(executor,))
+            monitor_thread.start()
+            
+            # pipe:0 -> ffmpeg
+            process = subprocess.Popen(["ffmpeg", "-i", audio_url] + self._get_ffmpeg_cmd()[3:], 
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            _, _ = process.communicate()
+            
+            self.is_ffmpeg_done = True
+            monitor_thread.join()
+        
+        duration = time.time() - start_time
+        logger.info(f"YouTube download completed in {duration:.2f}s")
+        
+        return self._assemble_results()
+    
+    def _download_first_strategy(self, source: str, start_time: float) -> str:
+        """Download the entire video first, then transcribe"""
+        import tempfile
+        
+        with tempfile.NamedTemporaryFile(suffix='.%(ext)s', delete=False) as tmp_file:
+            temp_path = tmp_file.name
+        
+        try:
+            # Download with yt-dlp
+            if self.bypass_manager:
+                ydl_opts = self.bypass_manager.get_ydl_options(attempt=0)
+            else:
+                ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
+            
+            ydl_opts.update({
+                'outtmpl': temp_path,
+                'format': 'worstaudio/worst',  # Use worst quality for faster download
+            })
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([source])
+            
+            # Find the downloaded file
+            import glob
+            downloaded_files = glob.glob(temp_path.replace('.%(ext)s', '.*'))
+            if not downloaded_files:
+                raise Exception("Download completed but file not found")
+            
+            actual_file = downloaded_files[0]
+            logger.info(f"Downloaded to: {actual_file}")
+            
+            # Now transcribe the local file
+            return self._transcribe_from_file(actual_file, start_time)
+            
+        finally:
+            # Cleanup downloaded file
+            try:
+                for f in glob.glob(temp_path.replace('.%(ext)s', '.*')):
+                    os.remove(f)
+            except:
+                pass
+    
+    def _alternative_extractor_strategy(self, source: str, start_time: float) -> str:
+        """Use alternative extraction with minimal options"""
+        # Very basic extraction
+        ydl_opts = {
+            'format': '18/worst',  # Format 18 is usually available
+            'quiet': True,
+            'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(source, download=False)
+            audio_url = info['url']
+        
+        # Use 4 threads for parallel transcription
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            monitor_thread = threading.Thread(target=self.monitor_chunks, args=(executor,))
+            monitor_thread.start()
+            
+            process = subprocess.Popen(["ffmpeg", "-i", audio_url] + self._get_ffmpeg_cmd()[3:], 
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            _, _ = process.communicate()
+            
+            self.is_ffmpeg_done = True
+            monitor_thread.join()
+        
+        duration = time.time() - start_time
+        logger.info(f"Alternative extraction completed in {duration:.2f}s")
+        
+        return self._assemble_results()
+    
+    def _transcribe_from_file(self, source: str, start_time: float) -> str:
+        """Transcribe from local file"""
+        # Use 4 threads for parallel transcription
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            monitor_thread = threading.Thread(target=self.monitor_chunks, args=(executor,))
+            monitor_thread.start()
+            
+            # Local file source
+            process = subprocess.Popen(self._get_ffmpeg_cmd_for_file(source), 
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            _, _ = process.communicate()
+            
+            self.is_ffmpeg_done = True
+            monitor_thread.join()
+        
+        return self._assemble_results()
+    
+    def _get_ffmpeg_cmd(self) -> list:
+        """Get ffmpeg command for streaming input"""
+        return [
+            "ffmpeg", "-i", "pipe:0",
             "-ar", "16000", "-ac", "1", "-f", "segment",
             "-segment_time", str(self.segment_time),
             "-reset_timestamps", "1",
             str(self.chunk_dir / "chunk_%03d.wav")
         ]
-
-        # Use 4 threads for parallel transcription
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            monitor_thread = threading.Thread(target=self.monitor_chunks, args=(executor,))
-            monitor_thread.start()
-
-            if is_url:
-                # Streaming from yt-dlp with bot bypass
-                try:
-                    # Get yt-dlp options (with bypass if available)
-                    if self.bypass_manager:
-                        ydl_opts = self.bypass_manager.get_ydl_options(attempt=0)
-                        logger.info(f"Starting YouTube download with bot bypass: {source}")
-                    else:
-                        ydl_opts = {
-                            'format': 'bestaudio/best',
-                            'quiet': True,
-                            'no_warnings': True,
-                        }
-                    
-                    # Extract audio URL with retry logic
-                    audio_url = self._extract_youtube_audio_url(source, ydl_opts)
-                    
-                    # pipe:0 -> ffmpeg
-                    process = subprocess.Popen(["ffmpeg", "-i", audio_url] + ffmpeg_cmd[3:], 
-                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    _, _ = process.communicate()
-                    
-                    duration = time.time() - start_time
-                    logger.info(f"YouTube download completed in {duration:.2f}s")
-                    
-                except Exception as e:
-                    logger.error(f"YouTube download failed: {str(e)}")
-                    
-                    # Return user-friendly error if bypass manager available
-                    if self.bypass_manager:
-                        attempts = self.bypass_manager.config.max_retries + 1
-                        error_msg = self.bypass_manager.get_user_friendly_error(e, attempts)
-                        
-                        # Add specific Railway/production guidance for bot detection
-                        if "Sign in to confirm you're not a bot" in str(e):
-                            error_msg += (
-                                "\n\n🚨 PRODUCTION ENVIRONMENT DETECTED:\n"
-                                "YouTube bot detection is common on cloud servers like Railway. "
-                                "For reliable production transcription:\n"
-                                "1. Export YouTube cookies using 'Get cookies.txt LOCALLY' browser extension\n"
-                                "2. Upload cookies.txt to your Railway deployment\n"
-                                "3. Set YOUTUBE_COOKIE_PATH environment variable in Railway dashboard\n"
-                                "4. Alternatively, try a different video or wait a few minutes"
-                            )
-                        
-                        return f"Transcription failed: {error_msg}"
-                    else:
-                        return f"Multimedia Critical Error: {str(e)}"
-            else:
-                # Local file source
-                process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                _, _ = process.communicate()
-
-            self.is_ffmpeg_done = True
-            monitor_thread.join()
-
-        # Reassemble results
+    
+    def _get_ffmpeg_cmd_for_file(self, source: str) -> list:
+        """Get ffmpeg command for file input"""
+        return [
+            "ffmpeg", "-i", source,
+            "-ar", "16000", "-ac", "1", "-f", "segment",
+            "-segment_time", str(self.segment_time),
+            "-reset_timestamps", "1",
+            str(self.chunk_dir / "chunk_%03d.wav")
+        ]
+    
+    def _assemble_results(self) -> str:
+        """Assemble transcription results from chunks"""
         assembled_text = ""
         for i in sorted(self.results.keys()):
             assembled_text += self.results[i] + " "
