@@ -105,9 +105,9 @@ class BotBypassConfig:
         user_agents = [ua.strip() for ua in user_agents_str.split(",")] if user_agents_str else default_user_agents
         
         cookie_path = os.environ.get("YOUTUBE_COOKIE_PATH")
-        max_retries = int(os.environ.get("YOUTUBE_MAX_RETRIES", "4"))
-        base_delay = float(os.environ.get("YOUTUBE_BASE_DELAY", "2.0"))
-        max_delay = float(os.environ.get("YOUTUBE_MAX_DELAY", "32.0"))
+        max_retries = int(os.environ.get("YOUTUBE_MAX_RETRIES", "6"))
+        base_delay = float(os.environ.get("YOUTUBE_BASE_DELAY", "3.0"))
+        max_delay = float(os.environ.get("YOUTUBE_MAX_DELAY", "60.0"))
         enable_logging = os.environ.get("YOUTUBE_ENABLE_LOGGING", "true").lower() == "true"
         
         return cls(
@@ -209,7 +209,7 @@ class ExtractionStrategyManager:
 class RetryHandler:
     """Implements exponential backoff retry logic"""
     
-    def __init__(self, max_retries: int = 4, base_delay: float = 2.0, max_delay: float = 32.0):
+    def __init__(self, max_retries: int = 6, base_delay: float = 3.0, max_delay: float = 60.0):
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -338,9 +338,30 @@ class BotBypassManager:
     def should_retry(self, error: Exception) -> bool:
         """Determines if an error is retryable"""
         error_type = classify_error(error)
+        error_str = str(error).lower()
         
-        # Retry bot detection and network errors
-        return error_type in [ErrorType.BOT_DETECTION, ErrorType.NETWORK_ERROR]
+        # Retry bot detection, network errors, and temporary YouTube issues
+        retryable_types = [ErrorType.BOT_DETECTION, ErrorType.NETWORK_ERROR]
+        
+        # Also retry specific YouTube temporary errors
+        temporary_patterns = [
+            "network error",
+            "connection",
+            "timeout",
+            "temporary",
+            "try again",
+            "unavailable",
+            "service unavailable",
+            "502",
+            "503",
+            "504"
+        ]
+        
+        # Check if it's a retryable type or contains temporary error patterns
+        is_retryable_type = error_type in retryable_types
+        has_temporary_pattern = any(pattern in error_str for pattern in temporary_patterns)
+        
+        return is_retryable_type or has_temporary_pattern
     
     def get_user_friendly_error(self, error: Exception, attempts: int = 1) -> str:
         """Converts technical errors to user-friendly messages"""
@@ -445,6 +466,16 @@ class StreamingTranscriptionManager:
                 elif "Requested format is not available" in error_str or "format" in error_str.lower():
                     logger.warning("Format not available, trying alternative formats...")
                     return self._try_alternative_extraction(source)
+                # If network error, the retry handler should have already tried multiple times
+                elif "network error" in error_str.lower() or "connection" in error_str.lower():
+                    logger.error("Network connectivity issue with YouTube after multiple retries")
+                    raise Exception(
+                        "Network error accessing YouTube from Railway servers. This can happen due to:\n"
+                        "1. Temporary YouTube server issues\n"
+                        "2. Railway network connectivity problems\n"
+                        "3. Geographic restrictions\n\n"
+                        "Please try again in a few minutes. If the issue persists, try a different video."
+                    )
                 raise e
         else:
             # Fallback to simple extraction
