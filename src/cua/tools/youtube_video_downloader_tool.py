@@ -420,25 +420,83 @@ class StreamingTranscriptionManager:
         return len(glob.glob(str(self.chunk_dir / "chunk_*.wav")))
     
     def _extract_youtube_audio_url(self, source: str, ydl_opts: dict) -> str:
-        """Extract audio URL from YouTube video with retry logic"""
+        """Extract audio URL from YouTube video with retry logic and fallback strategies"""
         if self.bypass_manager:
-            # Use retry handler
+            # Use retry handler with enhanced fallback
             def extract_with_opts(ydl_opts):
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(source, download=False)
                     self.bypass_manager.extraction_manager.log_successful_strategy(info)
                     return info['url']
             
-            return self.bypass_manager.retry_handler.execute_with_retry(
-                extract_with_opts,
-                self.bypass_manager,
-                ydl_opts=ydl_opts
-            )
+            try:
+                return self.bypass_manager.retry_handler.execute_with_retry(
+                    extract_with_opts,
+                    self.bypass_manager,
+                    ydl_opts=ydl_opts
+                )
+            except Exception as e:
+                # If bot detection fails, try alternative extraction methods
+                if "Sign in to confirm you're not a bot" in str(e):
+                    logger.warning("Bot detection triggered, trying alternative extraction methods...")
+                    return self._try_alternative_extraction(source)
+                raise e
         else:
             # Fallback to simple extraction
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(source, download=False)
                 return info['url']
+    
+    def _try_alternative_extraction(self, source: str) -> str:
+        """Try alternative extraction methods when bot detection occurs"""
+        alternative_configs = [
+            # Try with minimal options and different client
+            {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['web'],
+                        'skip': ['hls'],
+                    }
+                }
+            },
+            # Try with different user agent and no client specification
+            {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'user_agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            },
+            # Try with basic options only
+            {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+            }
+        ]
+        
+        for i, config in enumerate(alternative_configs):
+            try:
+                logger.info(f"Trying alternative extraction method {i+1}/{len(alternative_configs)}")
+                with yt_dlp.YoutubeDL(config) as ydl:
+                    info = ydl.extract_info(source, download=False)
+                    logger.info(f"Alternative extraction method {i+1} succeeded")
+                    return info['url']
+            except Exception as e:
+                logger.warning(f"Alternative method {i+1} failed: {str(e)}")
+                continue
+        
+        # If all alternatives fail, raise the original error with helpful message
+        raise Exception(
+            "YouTube bot detection could not be bypassed. This is common on cloud servers like Railway. "
+            "To resolve this issue:\n"
+            "1. Set up YouTube cookies using YOUTUBE_COOKIE_PATH environment variable\n"
+            "2. Use a browser extension like 'Get cookies.txt LOCALLY' to export cookies\n"
+            "3. Upload the cookies.txt file to your Railway deployment\n"
+            "4. Set YOUTUBE_COOKIE_PATH=/path/to/cookies.txt in Railway environment variables"
+        )
 
     def run(self, source: str, is_url: bool = True) -> str:
         """Starts the pipeline and returns the reassembled transcript."""
@@ -496,6 +554,19 @@ class StreamingTranscriptionManager:
                     if self.bypass_manager:
                         attempts = self.bypass_manager.config.max_retries + 1
                         error_msg = self.bypass_manager.get_user_friendly_error(e, attempts)
+                        
+                        # Add specific Railway/production guidance for bot detection
+                        if "Sign in to confirm you're not a bot" in str(e):
+                            error_msg += (
+                                "\n\n🚨 PRODUCTION ENVIRONMENT DETECTED:\n"
+                                "YouTube bot detection is common on cloud servers like Railway. "
+                                "For reliable production transcription:\n"
+                                "1. Export YouTube cookies using 'Get cookies.txt LOCALLY' browser extension\n"
+                                "2. Upload cookies.txt to your Railway deployment\n"
+                                "3. Set YOUTUBE_COOKIE_PATH environment variable in Railway dashboard\n"
+                                "4. Alternatively, try a different video or wait a few minutes"
+                            )
+                        
                         return f"Transcription failed: {error_msg}"
                     else:
                         return f"Multimedia Critical Error: {str(e)}"
