@@ -1,0 +1,775 @@
+video_download_task:
+  description: >
+    Read the routing directives first.
+    If selected_workflow is YOUTUBE_NOTES, use the YouTubeMediaAssistant tool to process
+    this exact URL: {youtube_url}. Return a high-fidelity transcript with accurate timestamps.
+    If selected_workflow is not YOUTUBE_NOTES, return SKIPPED: Not a YouTube workflow.
+  expected_output: >
+    A complete transcript with timestamps, or SKIPPED message for non-YouTube workflows.
+  agent: YouTubeMediaAssistant
+
+planner_agent_task:
+  description: >
+    Create a short execution plan based on user_input {user_input}, routing mode {task_type},
+    topic {topic}, and youtube_url {youtube_url}.
+    Planning objective: {planner_goal}
+    The plan must include workflow selection rationale, tool execution sequence, and output format.
+  expected_output: >
+    A concise workflow plan with clear steps that downstream tasks can follow.
+  agent: PlannerAgent
+
+routing_decision_task:
+  description: >
+    Using user_input {user_input}, task_type {task_type} (AUTO mode), and the planner plan,
+    produce explicit routing directives for downstream tasks.
+    If user_input describes a programming task, set selected_workflow to CODE_EXECUTION.
+    Return a compact routing block with selected_workflow (YOUTUBE_NOTES, GENERAL_QUERY,
+    CODE_EXECUTION, NUMERICAL_METHODS, or LAB_REPORT), tools_to_use list,
+    should_upload_to_notion flag, and notes_format specification.
+  expected_output: >
+    A deterministic routing directive with selected_workflow, tools_to_use list,
+    should_upload_to_notion boolean, and notes_format string.
+  agent: PlannerAgent
+
+code_execution_task:
+  description: >
+    You are a senior software engineer. Your job is to write AND execute code.
+
+    Analyze user_input: {user_input}
+
+    If this is a programming task (CODE_EXECUTION or GENERAL_QUERY with code request):
+
+    STEP 1 - WRITE THE CODE:
+    Write complete, working, well-commented Python code that fully solves the problem.
+    Rules for the code:
+    - Replace any input() calls with hardcoded sample values (e.g., num_threads = 3)
+    - The code must run without any user interaction
+    - Include all imports
+    - Add clear comments explaining each section
+    - For threading/semaphore tasks, use num_threads = 3 as the default sample value
+
+    STEP 2 - EXECUTE THE CODE:
+    Use the CodeCompilerTool with the exact code you wrote and language="python".
+    The tool will return the actual stdout output.
+
+    STEP 3 - RETURN BOTH:
+    Return in this exact format:
+
+    CODE:
+    ```python
+    [paste your complete code here]
+    ```
+
+    OUTPUT:
+    ```
+    [paste the exact stdout from CodeCompilerTool here]
+    ```
+
+    If the user requests visual graphs, charts, or plots, use the DataVizTool instead
+    of CodeCompilerTool. Ensure the markdown output from DataVizTool is included
+    so the final report can display the images.
+
+    If not a programming task, return: SKIPPED: No code execution required.
+  expected_output: >
+    The complete Python code in a fenced code block, followed by the actual execution
+    output in a separate output block. Both sections must be present and populated.
+  agent: CoderAgent
+
+lab_report_generation_task:
+  description: >
+    Read routing directives first.
+    If selected_workflow is LAB_REPORT, use LabReportGenerator tool to extract content
+    from the lab manual file at {lab_manual_path}.
+    
+    CRITICAL ANTI-HALLUCINATION RULES:
+    1. Extract the EXACT experiment title, method names, and algorithms from the lab manual
+    2. DO NOT substitute similar methods (e.g., False Position ≠ Newton-Raphson)
+    3. DO NOT add methods not mentioned in the lab manual
+    4. DO NOT change algorithm names or formulas
+    5. Use ONLY the code, formulas, and examples provided in the lab manual
+    6. If the lab manual mentions "Bisection and False Position", DO NOT write about Newton-Raphson
+    7. Verify that every method name in your output appears in the input document
+    8. If the Manual Contains Exercises then make sure you solve EACH question from the lab manual
+    9. If user uploads manual then DO NOT use citation tool
+    10. If user provides manual then use ONLY that manual for the report
+    11. FOR CODING EXERCISES: DO NOT use CitationFinder or search_tool - focus ONLY on solving exercises
+    12. EXERCISE PRIORITY: If manual contains exercises, focus 90% on solving them, 10% on theory
+    
+    UNIVERSAL LAB MANUAL SUPPORT - ALL SUBJECTS:
+    This task supports ALL types of lab manuals across all subjects:
+    - Numerical Methods (Octave/MATLAB - bisection, Newton-Raphson, integration, etc.)
+    - Programming (Python, C, C++, Java, JavaScript - any programming exercise)
+    - Operating Systems (process scheduling, memory management, file systems, threading)
+    - Networking (socket programming, protocols, packet analysis, routing)
+    - Database Systems (SQL queries, normalization, transactions, indexing)
+    - Data Structures & Algorithms (sorting, searching, trees, graphs, dynamic programming)
+    - Web Development (HTML/CSS/JS, React, Node.js, APIs, full-stack)
+    - Machine Learning (model training, data preprocessing, neural networks)
+    - Computer Architecture (assembly, CPU design, memory hierarchy)
+    - Compiler Design (lexical analysis, parsing, code generation)
+    - Pure Theory (conceptual understanding, no code required)
+    
+    CRITICAL: THEORY LENGTH ADAPTATION BASED ON LAB TYPE
+    
+    TYPE A - CODING-HEAVY LABS (Programming, OS, Networking, DSA, Web Dev, DB):
+      THEORY RULE: MAXIMUM 2-3 LINES PER CONCEPT
+      - Write ONLY brief definitions (1-2 sentences each)
+      - NO detailed explanations, NO history, NO extensive background
+      - NO CitationFinder tool, NO search_tool for coding exercises
+      - Example: "A binary search tree is a data structure where left child < parent < right child."
+      - FOCUS: 80% code implementation, 20% minimal theory
+      - IF EXERCISES EXIST: 90% solving exercises, 10% theory
+      - Sections: Brief objective → Minimal theory (2-3 lines) → Code → Output → Analysis
+    
+    TYPE B - NUMERICAL/MATHEMATICAL LABS (Numerical Methods, ML algorithms):
+      THEORY RULE: BALANCED APPROACH
+      - Include necessary mathematical formulas and algorithm explanations
+      - Show derivations if present in manual
+      - Explain convergence criteria and error analysis
+      - Use search_tool ONLY if theory is incomplete in manual
+      - FOCUS: 40% theory/math, 60% code/results
+      - IF EXERCISES EXIST: 70% solving exercises, 30% theory
+      - Sections: Objective → Theory with formulas → Algorithm → Code → Results → Analysis
+    
+    TYPE C - PURE THEORY LABS (Conceptual, no coding required):
+      THEORY RULE: DETAILED EXPLANATIONS
+      - Comprehensive explanations of concepts
+      - Include diagrams, examples, and case studies
+      - Use search_tool if additional context needed
+      - No code execution needed
+      - FOCUS: 90% theory and analysis, 10% examples
+      - Sections: Objective → Detailed Theory → Examples → Discussion → Conclusion
+    
+    EXERCISE-FIRST APPROACH:
+    When lab manual contains exercises:
+    1. PRIORITY: Solving exercises is the PRIMARY goal
+    2. Theory should be MINIMAL - just enough to understand the exercise
+    3. DO NOT use CitationFinder or search_tool for coding exercises
+    4. Focus on: Exercise statement → Solution code → Output → Brief explanation
+    5. Solve ALL exercises completely before adding any additional theory
+    6. Each exercise solution should include:
+       - Exercise number and question
+       - Complete working code
+       - Execution output
+       - 1-2 line explanation of the solution
+    
+    EXTRACTION REQUIREMENTS:
+    - Title: Extract verbatim from the lab manual header
+    - Objective: Use exact objectives listed in the lab manual
+    - Lab Type Detection: Analyze content to determine TYPE A, B, or C
+    - Theory: Adapt length based on lab type (MINIMAL for coding, DETAILED for theory)
+    - Algorithms: Use the exact algorithms, formulas, and code from the lab manual
+    - Examples: Use the exact examples with their specific values from the lab manual
+    - Exercises: Extract ALL exercises and solve them (HIGHEST PRIORITY)
+    
+    WORKFLOW:
+    1. Parse extracted content to identify title, objective, theory, procedure, and exercises
+    2. DETECT LAB TYPE by analyzing keywords:
+       - TYPE A indicators: "write code", "implement", "program", "function", "class", "debug"
+       - TYPE B indicators: "calculate", "formula", "equation", "numerical", "algorithm", "convergence"
+       - TYPE C indicators: "explain", "describe", "discuss", "compare", "analyze" (no code)
+    3. IDENTIFY ALL EXERCISES (Exercise 1, Exercise 2, etc.) - THIS IS THE PRIORITY
+    4. Extract ALL method/concept names mentioned
+    5. Store method names and verify throughout report generation
+    6. ADAPT THEORY SECTION based on detected type:
+       - TYPE A: Write 2-3 line definitions only, skip detailed theory
+       - TYPE B: Include formulas, derivations, and mathematical background
+       - TYPE C: Write comprehensive theory with examples
+    7. TOOL SELECTION based on programming language detected:
+       - Python → CodeCompilerTool
+       - C/C++/Java → CodeCompilerTool
+       - Octave/MATLAB → OctaveOnline tool
+       - JavaScript/Node.js → CodeCompilerTool
+       - SQL → Describe queries and expected results (no execution)
+       - Shell/Bash → Describe commands and expected output
+    8. SOLVE ALL EXERCISES FIRST before adding theory:
+       - Execute each exercise code
+       - Capture output
+       - Provide brief explanation
+    9. DO NOT use CitationFinder or search_tool for TYPE A (coding) labs
+    10. Use search_tool ONLY for TYPE B/C if theory is incomplete in manual
+    11. Compile into professional lab report with exercise solutions as main content
+    12. FINAL VERIFICATION: Confirm all method names match input document
+    
+    TOOL USAGE RULES:
+    - CitationFinder: NEVER use for lab manuals (user uploaded content)
+    - search_tool: ONLY for TYPE B/C if theory incomplete, NEVER for TYPE A coding exercises
+    - CodeCompilerTool: Use for Python, C, C++, Java, JavaScript
+    - OctaveOnline: Use for Octave/MATLAB
+    - Notion: Optional - if credentials not provided, skip without error
+    
+    EXERCISE SOLVING REQUIREMENTS:
+    - Identify ALL exercises in the manual (Exercise 1, Exercise 2, etc.)
+    - Solve EACH exercise completely with code and output
+    - Show step-by-step solution for each exercise
+    - Include all sub-questions within exercises
+    - Exercises are the PRIMARY content - 90% of report if they exist
+    
+    If selected_workflow is not LAB_REPORT, return SKIPPED: Not a lab report workflow.
+  expected_output: >
+    A complete professional lab report in markdown format that strictly follows the input
+    lab manual content. All method names, formulas, and examples must match the input document.
+    No substitution of similar methods allowed. Theory length adapted to lab type: minimal
+    (2-3 lines) for coding labs, balanced for numerical labs, detailed for theory labs.
+    If exercises exist, they are the PRIMARY content (90% of report). All exercises from
+    the manual solved completely with code and output. No citations for lab manuals.
+    No search_tool for coding exercises. Notion integration optional.
+    Or SKIPPED for non-lab workflows.
+  agent: LabReportGeneratorAgent
+
+numerical_methods_task:
+  description: >
+    Read routing directives first.
+    If selected_workflow is NUMERICAL_METHODS, solve the requested numerical problem.
+    Use OctaveOnline tool to execute Octave/MATLAB code and include execution output.
+    Return a lab-style report with problem statement, method, code, output, and interpretation.
+    If selected_workflow is not NUMERICAL_METHODS, return SKIPPED: Not a numerical methods workflow.
+  expected_output: >
+    A numerical methods lab report with code and execution output, or SKIPPED message.
+  agent: NumericalMethodsAgent
+
+notes_creation_task:
+  description: >
+    You are a senior academic writer with 20+ years of experience producing
+    doctoral-level engineering lab reports. Every word you write must pass as
+    the genuine work of a meticulous, knowledgeable human student.
+
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 1 — WORKFLOW DETECTION & DATA EXTRACTION
+    ════════════════════════════════════════════════════════════════════════
+
+    STEP 1: Detect the workflow type by examining all upstream task outputs:
+    
+    WORKFLOW A — CODE EXECUTION (code_execution_task has CODE + OUTPUT):
+      Extract and STORE:
+        FULL_CODE     = complete source code from code_execution_task
+        FULL_OUTPUT   = complete execution output from code_execution_task
+        EXPERIMENT_TOPIC = subject in 3–6 words
+        WORKFLOW_TYPE = "CODE_EXECUTION"
+      
+      VALIDATION: If code_execution_task output contains "SKIPPED" or lacks
+      both CODE and OUTPUT blocks, this is NOT a code execution workflow.
+    
+    WORKFLOW B — LAB REPORT (lab_report_generation_task has content):
+      Extract and STORE:
+        LAB_REPORT_CONTENT = complete lab report from lab_report_generation_task
+        EXPERIMENT_TOPIC = extract EXACT title from lab report (DO NOT modify or substitute)
+        METHOD_NAMES = extract ALL method names mentioned (e.g., Bisection, False Position, Secant)
+        WORKFLOW_TYPE = "LAB_REPORT"
+        FULL_CODE = extract any code blocks from lab report
+        FULL_OUTPUT = extract any output blocks from lab report
+      
+      ANTI-HALLUCINATION VALIDATION:
+        - Verify EXPERIMENT_TOPIC matches the lab manual title exactly
+        - Store METHOD_NAMES list and verify it throughout document generation
+        - DO NOT substitute similar methods (False Position ≠ Newton-Raphson)
+        - DO NOT add methods not in the original lab manual
+        - All formulas must match the lab report content exactly
+      
+      VALIDATION: If lab_report_generation_task output contains "SKIPPED",
+      this is NOT a lab report workflow.
+    
+    WORKFLOW C — NUMERICAL METHODS (numerical_methods_task has content):
+      Extract and STORE:
+        NUMERICAL_CONTENT = complete report from numerical_methods_task
+        EXPERIMENT_TOPIC = extract from problem statement
+        WORKFLOW_TYPE = "NUMERICAL_METHODS"
+        FULL_CODE = extract Octave/MATLAB code
+        FULL_OUTPUT = extract execution results
+      
+      VALIDATION: If numerical_methods_task output contains "SKIPPED",
+      this is NOT a numerical methods workflow.
+    
+    WORKFLOW D — YOUTUBE TRANSCRIPTION (video_download_task has transcript):
+      Extract and STORE:
+        TRANSCRIPT_CONTENT = complete transcript from video_download_task
+        EXPERIMENT_TOPIC = extract from video title/content
+        WORKFLOW_TYPE = "YOUTUBE_NOTES"
+        FULL_CODE = empty (not applicable)
+        FULL_OUTPUT = empty (not applicable)
+      
+      VALIDATION: If video_download_task output contains "SKIPPED",
+      this is NOT a YouTube workflow.
+    
+    WORKFLOW E — GENERAL QUERY (no specific workflow detected):
+      Extract and STORE:
+        QUERY_RESPONSE = synthesize from all available task outputs
+        EXPERIMENT_TOPIC = extract from user_input
+        WORKFLOW_TYPE = "GENERAL_QUERY"
+        FULL_CODE = empty or extract if any code present
+        FULL_OUTPUT = empty or extract if any output present
+
+    STEP 2: Validate extracted data:
+      - EXPERIMENT_TOPIC must not be empty
+      - At least one content source must be available
+      - If WORKFLOW_TYPE is CODE_EXECUTION but FULL_CODE or FULL_OUTPUT is empty,
+        fall back to GENERAL_QUERY workflow
+
+    STEP 3: Set content adaptation flags:
+      HAS_CODE = True if FULL_CODE is not empty
+      HAS_OUTPUT = True if FULL_OUTPUT is not empty
+      HAS_LAB_CONTENT = True if LAB_REPORT_CONTENT exists
+      HAS_NUMERICAL_CONTENT = True if NUMERICAL_CONTENT exists
+      HAS_TRANSCRIPT = True if TRANSCRIPT_CONTENT exists
+
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 2 — CITATION RETRIEVAL
+    ════════════════════════════════════════════════════════════════════════
+
+    Call CitationFinder(query=EXPERIMENT_TOPIC).
+    Collect exactly 4–5 results. Store as CITATIONS[1..5].
+    Each citation must be real, verifiable, and complete:
+      - Author names, article/book title, journal or publisher,
+        volume, issue, page range, year, DOI or ISBN.
+    
+    If fewer than 4 results return, call CitationFinder again with a
+    broader 2–3 word query variant. Repeat until 4–5 are secured.
+    
+    FALLBACK: If CitationFinder fails or returns insufficient results,
+    use search_tool to find relevant academic sources and format them
+    as IEEE citations manually.
+    
+    NEVER guess, invent, or partially fill any citation field.
+
+    ════════════════════════════════════════════════════════════════════════
+    PHASE 3 — DOCUMENT ASSEMBLY
+    ════════════════════════════════════════════════════════════════════════
+
+    Read memory_context {memory_context} for student name, university,
+    course code, and instructor. If any field is absent, leave the table
+    cell blank — do not guess.
+
+    ─────────────────────────────────────────────────────────────────────
+    DOCUMENT HEADER
+    ─────────────────────────────────────────────────────────────────────
+
+    Output this header block verbatim, substituting each bracketed value:
+
+    # [Full Descriptive Experiment Title — infer from EXPERIMENT_TOPIC]
+
+    | Field        | Detail                                           |
+    |:-------------|:-------------------------------------------------|
+    | University   | [from memory_context or "Not specified"]         |
+    | Department   | [from memory_context or "Not specified"]         |
+    | Course       | [Course Name — Course Code from memory_context]  |
+    | Experiment   | [Experiment Title]                               |
+    | Student      | [from memory_context or "Not specified"]         |
+    | Student ID   | [from memory_context if available]               |
+    | Instructor   | [from memory_context or "Not specified"]         |
+    | Date         | [DD Month YYYY — today]                          |
+
+    ---
+
+    ─────────────────────────────────────────────────────────────────────
+    TABLE OF CONTENTS
+    ─────────────────────────────────────────────────────────────────────
+
+    ## Table of Contents
+
+    1. [Objective](#1-objective)
+    2. [Theory and Background](#2-theory-and-background)
+    3. [Methodology](#3-methodology)
+    4. [Implementation](#4-implementation)
+    5. [Results and Analysis](#5-results-and-analysis)
+    6. [Discussion](#6-discussion)
+    7. [Conclusion](#7-conclusion)
+    8. [References](#8-references)
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 1 — OBJECTIVE
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 1. Objective
+
+    Write exactly 2–3 sentences based on WORKFLOW_TYPE:
+    
+    IF WORKFLOW_TYPE is CODE_EXECUTION:
+      REQ-1: Name the specific algorithm, OS primitive, or data structure.
+      REQ-2: State what was implemented and in what environment/language.
+      REQ-3: Identify what behaviour or property is demonstrated/measured.
+    
+    IF WORKFLOW_TYPE is LAB_REPORT or NUMERICAL_METHODS:
+      REQ-1: State the experiment/problem objective clearly.
+      REQ-2: Identify the method or algorithm being studied.
+      REQ-3: Specify what is being measured, calculated, or demonstrated.
+    
+    IF WORKFLOW_TYPE is YOUTUBE_NOTES:
+      REQ-1: Summarize the video's main topic and purpose.
+      REQ-2: Identify key concepts or skills covered.
+      REQ-3: State the learning objectives or takeaways.
+    
+    IF WORKFLOW_TYPE is GENERAL_QUERY:
+      REQ-1: State the query or problem being addressed.
+      REQ-2: Identify the approach or methodology used.
+      REQ-3: Specify the expected outcome or deliverable.
+
+    Sentence rhythm: lead with implementation → follow with demonstration.
+    BANNED openers: "The aim", "This lab", "This experiment aims",
+    "The purpose", "The goal", "This report", "We aim", "This study".
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 2 — THEORY AND BACKGROUND
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 2. Theory and Background
+
+    STRUCTURE: Write exactly 6 paragraphs in this order. Each paragraph
+    must be 5–10 sentences. No bullet points. No sub-headings within
+    this section. Pure flowing academic prose throughout.
+
+    CONTENT ADAPTATION based on WORKFLOW_TYPE:
+    
+    IF HAS_LAB_CONTENT or HAS_NUMERICAL_CONTENT:
+      CRITICAL: Use theory section from lab report or numerical methods output.
+      ANTI-HALLUCINATION RULES:
+        - Write about ONLY the methods listed in METHOD_NAMES
+        - DO NOT substitute similar methods (e.g., False Position ≠ Newton-Raphson)
+        - DO NOT add methods not in the original document
+        - Use the EXACT formulas from the lab report content
+        - Research and cite sources for ONLY the methods in METHOD_NAMES
+      Enhance with additional research if needed, but ONLY for the specified methods.
+      Maintain 6-paragraph structure covering ONLY the methods in the lab manual.
+    
+    IF HAS_TRANSCRIPT:
+      Extract theoretical concepts from transcript.
+      Research and expand each concept into full paragraphs.
+      Cite academic sources for each concept.
+    
+    OTHERWISE (CODE_EXECUTION or GENERAL_QUERY):
+      Research EXPERIMENT_TOPIC thoroughly and write original content.
+
+    P1 — DEFINITION & ETYMOLOGY
+      Provide a formal, precise definition. Include the etymology of the
+      key term if non-trivial. Define all notation used later. Cite [N].
+
+    P2 — INTERNAL MECHANISM
+      Explain how the concept operates at the OS, hardware, or algorithmic
+      level. Describe data structures, system calls, or execution steps
+      involved. Be technical and specific.
+
+    P3 — MATHEMATICAL / LOGICAL FOUNDATIONS
+      Present formal notation, invariants, or equations central to the
+      concept. Use plain fenced code blocks for multi-line equations.
+      Use inline code `backticks` for short expressions.
+      NO LaTeX display-math \[ ... \] blocks.
+
+    P4 — HISTORICAL CONTEXT
+      Identify who introduced the concept, when, and the original problem
+      it solved. Describe how the concept evolved to its modern form.
+      Cite the foundational source [N].
+
+    P5 — REAL-WORLD APPLICATIONS
+      Name 3–4 specific production systems or standards that rely on this
+      concept. For each, give one concrete detail about how it is used.
+
+    P6 — CONTRAST WITH RELATED CONCEPT
+      Compare with the nearest alternative. Show precisely where they differ
+      in behaviour, overhead, and appropriate use cases. Cite [N].
+
+    BANNED phrases (instant fail if any appear):
+      "It is worth noting" | "It should be noted" | "It is important to"
+      "In today's world" | "In the realm of" | "Furthermore" | "Moreover"
+      "Additionally" | "Delve into" | "Leverage" | "Firstly/Secondly"
+      "As we can see" | "Clearly," | "Obviously," | "Simply put,"
+
+    MANDATORY: Cite at least 2 of CITATIONS[1..5] inline as [1], [2], etc.
+    Place citations at the end of the sentence they support, before the period.
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 3 — METHODOLOGY
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 3. Methodology
+
+    Write exactly 7 numbered steps. Each step uses this rigid structure:
+
+      N. **[Concise step title]**
+         WHAT: [1–2 sentences stating the action taken.]
+         WHY:  [1–2 sentences justifying the engineering decision.]
+
+    CONTENT ADAPTATION based on WORKFLOW_TYPE:
+    
+    IF HAS_LAB_CONTENT:
+      Extract methodology from lab report and format into 7 WHAT+WHY steps.
+    
+    IF HAS_NUMERICAL_CONTENT:
+      Extract numerical method steps and format into 7 WHAT+WHY steps.
+    
+    IF HAS_CODE:
+      Cover these seven topics in order:
+        1. Execution environment — OS name + version, CPU architecture
+        2. Language & toolchain — compiler/interpreter, version, flags
+        3. Library selection — which libraries and why those specifically
+        4. Algorithm / design approach — key design decision and rationale
+        5. Input / parameter configuration — how test parameters were chosen
+        6. Testing and edge-case strategy — what edge cases were tested
+        7. Output validation approach — how correctness was confirmed
+    
+    OTHERWISE:
+      Describe the 7-step process used to address the query/problem.
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 4 — IMPLEMENTATION
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 4. Implementation
+
+    CONTENT ADAPTATION based on available data:
+    
+    IF HAS_CODE (FULL_CODE exists and is not empty):
+      4A. DESIGN OVERVIEW (1 paragraph, 4–6 sentences)
+        Describe the overall architecture: major components, their
+        responsibilities, and how they interact. Name every significant
+        function or class. Do not describe line numbers.
+
+      4B. SOURCE CODE
+        Insert FULL_CODE verbatim inside a fenced code block with the
+        correct language tag (python, matlab, octave, c, cpp, java, etc.).
+        The code must be byte-perfect — no truncation, no paraphrase,
+        no ellipsis ("..."), no "[rest of code]".
+        
+        ```[language]
+        [FULL_CODE — inserted exactly as extracted in Phase 1]
+        ```
+
+      4C. ### Code Walkthrough
+        Walk through the code in logical blocks, NOT line by line.
+        For each logical block write 2–4 sentences:
+          — what the block does
+          — why it is structured that way
+          — any non-obvious design choice
+        One paragraph per distinct logical block.
+        Minimum 4 walkthrough paragraphs; maximum 8.
+    
+    ELSE IF HAS_LAB_CONTENT:
+      Use the implementation section from LAB_REPORT_CONTENT.
+      Include algorithm descriptions, pseudocode, and methodology.
+      Ensure all code/algorithms are properly formatted in fenced code blocks.
+    
+    ELSE IF HAS_NUMERICAL_CONTENT:
+      Use the implementation section from NUMERICAL_CONTENT.
+      Include mathematical formulations, algorithms, and code.
+      Format all equations and code properly.
+    
+    ELSE IF HAS_TRANSCRIPT:
+      Synthesize implementation details from transcript content.
+      If the video demonstrated code or procedures, describe them here.
+      If no implementation was shown, describe the conceptual approach.
+    
+    OTHERWISE:
+      Describe the approach taken to address the query/problem.
+      Include any relevant algorithms, procedures, or methodologies.
+      Minimum 3 paragraphs.
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 5 — RESULTS AND ANALYSIS
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 5. Results and Analysis
+
+    CONTENT ADAPTATION based on available data:
+    
+    IF HAS_OUTPUT (FULL_OUTPUT exists and is not empty):
+      5A. CONTEXT SENTENCE
+        One sentence naming: OS, hardware, and date of execution.
+
+      5B. RAW OUTPUT
+        Insert FULL_OUTPUT verbatim in a plain code fence (no language tag).
+        Place exactly one blank line before and after the fence block.
+        
+        ```
+        [FULL_OUTPUT — inserted exactly as extracted in Phase 1]
+        ```
+        
+      5C. INLINE CHARTS
+        If DataVizTool returned image markdown, insert each image reference
+        on its own line immediately after the code fence.
+
+      5D. ANALYSIS PARAGRAPHS (4–5 paragraphs)
+        Para 1: Walk through the output section by section.
+        Para 2: Verify against theoretical expectations from Section 2.
+        Para 3: Interpret specific numeric values.
+        Para 4: Present measurable data as a Markdown table if applicable.
+        Para 5 (optional): Note any anomalous or unexpected results.
+    
+    ELSE IF HAS_LAB_CONTENT:
+      Use the results and analysis section from LAB_REPORT_CONTENT.
+      Include example outputs, numerical results, graphs, and analysis.
+      Ensure all outputs are properly formatted.
+    
+    ELSE IF HAS_NUMERICAL_CONTENT:
+      Use the results section from NUMERICAL_CONTENT.
+      Include numerical results, convergence analysis, error analysis.
+      Present results in tables and/or graphs.
+    
+    ELSE IF HAS_TRANSCRIPT:
+      Synthesize key findings and insights from the transcript.
+      Organize into 4–5 analytical paragraphs.
+      Include any examples, case studies, or demonstrations mentioned.
+    
+    OTHERWISE:
+      Present findings, observations, or outcomes.
+      Analyze the results in 4–5 paragraphs.
+      Use tables or lists to organize information if appropriate.
+
+    BANNED: "Output will vary" | "Results may differ" | "Sample output"
+           "[output here]" | "as shown above" | any hypothetical phrasing
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 6 — DISCUSSION
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 6. Discussion
+
+    Write exactly 4 paragraphs. No bullet points. No sub-headings.
+
+      D1 — THEORY ALIGNMENT
+           Compare results against the theoretical model in Section 2.
+           State concretely whether they agree or diverge, and why.
+           Reference specific values or findings.
+
+      D2 — EDGE CASES & FAILURE MODES
+           Identify 2–3 boundary conditions relevant to this work.
+           For each, describe the expected behavior and how to handle it.
+
+      D3 — LIMITATIONS & SCALABILITY
+           State what assumptions were made.
+           Identify at least one aspect that does not scale or generalise.
+           Use concrete terms and specific examples.
+
+      D4 — PRODUCTION RELEVANCE
+           Connect this work to a real-world system or industry practice.
+           Name the system. Be specific about the connection.
+           Cite one of CITATIONS[1..5].
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 7 — CONCLUSION
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 7. Conclusion
+
+    Write exactly 4 sentences. No more, no less.
+      S1: What was implemented/studied and demonstrated (past tense, specific).
+      S2: The single most significant finding or result.
+      S3: One concrete, technically specific direction for future work.
+      S4: One sentence on broader practical relevance.
+
+    BANNED openers: "In conclusion," | "To summarise," | "Overall,"
+    "In summary," | "As shown," | "This report has shown"
+
+    ---
+
+    ══════════════════════════════════════════════════════════════════════
+    SECTION 8 — REFERENCES
+    ══════════════════════════════════════════════════════════════════════
+
+    ## 8. References
+
+    List CITATIONS[1..5] in IEEE format, ordered by first appearance
+    in the document (not alphabetically). Use these exact templates:
+
+    Journal article:
+      [N] A. A. Author and B. B. Author, "Title of article," *Abbrev.
+          Journal Name*, vol. X, no. Y, pp. ZZZ–ZZZ, Mon. YYYY,
+          doi: 10.XXXX/XXXXX.
+
+    Book:
+      [N] A. A. Author, *Book Title*, Nth ed. City, Country:
+          Publisher, YYYY, pp. ZZZ–ZZZ.
+
+    Conference paper:
+      [N] A. A. Author, "Title," in *Proc. Full Conf. Name (ABBR)*,
+          City, Country, YYYY, pp. ZZZ–ZZZ, doi: 10.XXXX/XXXXX.
+
+    Online standard / RFC (only when no print version exists):
+      [N] Standard Body, *Standard Title*, Standard No., Mon. YYYY.
+          [Online]. Available: https://... [Accessed: DD Mon. YYYY].
+
+    VERIFICATION RULE: Every [N] cited inline must appear here.
+    Every entry here must be cited at least once in the body.
+    No orphan references. No orphan inline citations.
+
+    ══════════════════════════════════════════════════════════════════════
+    GLOBAL WRITING STANDARDS — apply to every character of output
+    ══════════════════════════════════════════════════════════════════════
+
+    TYPOGRAPHY & MATH RULES:
+      - NO LaTeX display-math blocks \[ ... \] anywhere in the document.
+      - Use inline code `backticks` for: variable names, function names,
+        file names, flags, OS commands, and short math expressions.
+      - Use fenced code blocks (``` ... ```) for multi-line code/equations.
+      - Bold (**text**) only for: table column headers, step titles in
+        Section 3, and the first introduction of a defined technical term.
+      - No emojis. No decorative Unicode. Horizontal rules (---) only
+        between major sections, never within a section.
+
+    SPACING & ALIGNMENT:
+      - One blank line between paragraphs. Never two or more blank lines.
+      - No trailing spaces on any line.
+      - Markdown tables: always include a header row; align column pipes
+        consistently; use :--- for left, :---: for centre, ---: for right.
+      - Code fences: the opening ``` is on its own line; the closing ``` is
+        on its own line; exactly one blank line before and one after the
+        entire fence block; no extra blank lines inside the fence.
+
+    FORBIDDEN PHRASES — auto-fail if any of these appear anywhere:
+      "It is worth noting" | "It should be noted" | "It is important to"
+      "This experiment aims" | "The purpose of this lab" | "Delve into"
+      "In today's fast-paced" | "In the realm of" | "Leverage" (as verb)
+      "Furthermore" | "Moreover" | "Additionally" | "In conclusion"
+      "To summarise" | "Firstly/Secondly/Thirdly" | "Needless to say"
+      "[placeholder]" | "[output here]" | "[code here]" | "SKIPPED"
+      "will be shown" | "would demonstrate" | "As we can see" | "Clearly,"
+      "Obviously," | "Simply put," | "Output will vary" | "Sample output"
+
+    WORD COUNT:
+      Minimum 1,800 words of prose.
+      Code blocks and output blocks are excluded from this count.
+
+    FINAL QUALITY GATE — verify every checkbox before outputting:
+      [ ] Content extracted from appropriate workflow (no SKIPPED messages)
+      [ ] EXPERIMENT_TOPIC is meaningful and specific
+      [ ] FOR LAB REPORTS: All method names in output match METHOD_NAMES list exactly
+      [ ] FOR LAB REPORTS: No substitution of similar methods (verify each method name)
+      [ ] FOR LAB REPORTS: All formulas match the lab report content exactly
+      [ ] Zero LaTeX \[ ... \] display-math blocks anywhere in document
+      [ ] Zero double blank lines anywhere in the document
+      [ ] Zero forbidden phrases
+      [ ] Zero placeholders of any kind
+      [ ] 4–5 real IEEE references, every field verifiable
+      [ ] Section 2 has exactly 6 prose paragraphs, zero bullet points
+      [ ] Section 3 has exactly 7 numbered WHAT+WHY steps
+      [ ] Section 4 has implementation content (code or description)
+      [ ] Section 5 has results/analysis content (output or findings)
+      [ ] Section 6 has exactly 4 paragraphs, zero bullet points
+      [ ] Section 7 has exactly 4 sentences
+      [ ] Every [N] in body has a matching entry in Section 8
+      [ ] Every entry in Section 8 is cited at least once in the body
+      [ ] Minimum 1,800 prose words (excluding code and output blocks)
+
+  expected_output: >
+    A submission-ready academic document in Markdown. All 8 sections
+    present, complete, and free of placeholder text. Content adapted
+    appropriately based on workflow type (CODE_EXECUTION, LAB_REPORT,
+    NUMERICAL_METHODS, YOUTUBE_NOTES, or GENERAL_QUERY). Section 2
+    contains exactly 6 graduate-level textbook paragraphs with zero
+    bullet points and zero LaTeX display-math blocks. Section 8 lists
+    4–5 real, fully-populated IEEE citations. The document contains zero
+    forbidden phrases, zero extra blank lines, zero emojis, and a minimum
+    of 1,800 words of prose outside code and output blocks.
+
+  agent: Elite_Academic_Document_Architect

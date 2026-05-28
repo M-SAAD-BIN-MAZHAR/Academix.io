@@ -13,11 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from dotenv import load_dotenv
 
-# ── Load env from cua/.env ──────────────────────────────────────────────────
-load_dotenv(Path(__file__).parent.parent / ".env")
+# ── Load env ─────────────────────────────────────────────────────────────────
+_env_path = Path(__file__).parent / ".env"
+if not _env_path.exists():
+    _env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path)
 
-# ── Path setup ──────────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# ── Path setup ────────────────────────────────────────────────────────────────
+# src/ is bundled inside backend/ for self-contained deployment
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from cua.crew import Cua
@@ -26,18 +30,18 @@ from cua.tools.youtube_video_downloader_tool import MultimediaAssistantTool
 from app.llm import get_llm
 from app.report_exporter import markdown_to_docx
 
-# ── Logging ─────────────────────────────────────────────────────────────────
+# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger("Academix")
 
-# ── App ──────────────────────────────────────────────────────────────────────
+# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Academix.io API",
     description="Academic automation engine — reports, transcription, chat.",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -48,30 +52,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
-# ── Health ───────────────────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "2.0.0"}
+    return {"status": "healthy", "version": "2.1.0"}
 
 
-# ── Chat ─────────────────────────────────────────────────────────────────────
+# ── Chat ──────────────────────────────────────────────────────────────────────
 @app.post("/api/chat")
 async def chat(
     message: str = Form(...),
-    x_openai_key: Optional[str] = Header(None),
-    x_groq_key: Optional[str] = Header(None),
-    x_serper_key: Optional[str] = Header(None),
+    x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
+    x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
+    x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
+        if x_openai_key and x_openai_key.strip():
+            os.environ["OPENAI_API_KEY"] = x_openai_key.strip()
+        elif x_groq_key and x_groq_key.strip():
+            os.environ["GROQ_API_KEY"] = x_groq_key.strip()
+        if x_serper_key and x_serper_key.strip():
+            os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
+
         msg_lower = message.lower()
 
-        # Identity questions — hardcoded
         if any(q in msg_lower for q in ["who created you", "who made you", "who built you"]):
             response = (
                 "I am the **Academix Agent**, created by **Muhammad Saad bin Mazhar**. "
@@ -92,7 +117,6 @@ async def chat(
             save_chat(message, response)
             return {"response": response}
 
-        # Use LLM for real academic responses
         llm = get_llm(user_openai_key=x_openai_key, user_groq_key=x_groq_key)
 
         if llm:
@@ -127,9 +151,14 @@ async def chat(
 async def generate_report(
     prompt: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    x_openai_key: Optional[str] = Header(None),
-    x_groq_key: Optional[str] = Header(None),
-    x_serper_key: Optional[str] = Header(None),
+    x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
+    x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
+    x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
         file_path = ""
@@ -142,13 +171,22 @@ async def generate_report(
 
         user_input = prompt.strip() if prompt and prompt.strip() else "Generate a complete academic report from the uploaded file."
 
-        # Apply user-supplied keys to environment for this request
         if x_openai_key and x_openai_key.strip():
             os.environ["OPENAI_API_KEY"] = x_openai_key.strip()
         elif x_groq_key and x_groq_key.strip():
             os.environ["GROQ_API_KEY"] = x_groq_key.strip()
         if x_serper_key and x_serper_key.strip():
             os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
 
         inputs = {
             "topic": user_input[:100],
@@ -189,9 +227,14 @@ async def transcribe(
     youtube_url: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     instructions: Optional[str] = Form(None),
-    x_openai_key: Optional[str] = Header(None),
-    x_groq_key: Optional[str] = Header(None),
-    x_serper_key: Optional[str] = Header(None),
+    x_openai_key: Optional[str] = Header(None, alias="X-OpenAI-Key"),
+    x_groq_key: Optional[str] = Header(None, alias="X-Groq-Key"),
+    x_serper_key: Optional[str] = Header(None, alias="X-Serper-Key"),
+    x_notion_api_key: Optional[str] = Header(None, alias="X-Notion-API-Key"),
+    x_notion_database_id: Optional[str] = Header(None, alias="X-Notion-Database-ID"),
+    x_adobe_client_id: Optional[str] = Header(None, alias="X-Adobe-Client-ID"),
+    x_adobe_client_secret: Optional[str] = Header(None, alias="X-Adobe-Client-Secret"),
+    x_octave_api_key: Optional[str] = Header(None, alias="X-Octave-API-Key"),
 ):
     try:
         if x_openai_key and x_openai_key.strip():
@@ -200,6 +243,17 @@ async def transcribe(
             os.environ["GROQ_API_KEY"] = x_groq_key.strip()
         if x_serper_key and x_serper_key.strip():
             os.environ["SERPER_API_KEY"] = x_serper_key.strip()
+        if x_notion_api_key and x_notion_api_key.strip():
+            os.environ["NOTION_API_KEY"] = x_notion_api_key.strip()
+        if x_notion_database_id and x_notion_database_id.strip():
+            os.environ["NOTION_DATABASE_ID"] = x_notion_database_id.strip()
+        if x_adobe_client_id and x_adobe_client_id.strip():
+            os.environ["ADOBE_CLIENT_ID"] = x_adobe_client_id.strip()
+        if x_adobe_client_secret and x_adobe_client_secret.strip():
+            os.environ["ADOBE_CLIENT_SECRET"] = x_adobe_client_secret.strip()
+        if x_octave_api_key and x_octave_api_key.strip():
+            os.environ["OCTAVE_API_KEY"] = x_octave_api_key.strip()
+
         media_path = None
         if file and file.filename:
             dest = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"

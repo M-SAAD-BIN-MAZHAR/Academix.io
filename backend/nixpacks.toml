@@ -3,9 +3,12 @@ nixPkgs = ["python311", "ffmpeg", "gcc"]
 
 [phases.install]
 cmds = [
-  "pip install --upgrade pip",
+  "pip install --upgrade pip setuptools wheel",
   "pip install -r requirements.txt"
 ]
+
+[variables]
+PYTHONPATH = "/app/src:/app"
 
 [start]
 cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
