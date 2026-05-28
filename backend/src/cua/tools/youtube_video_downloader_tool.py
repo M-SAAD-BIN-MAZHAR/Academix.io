@@ -1029,59 +1029,49 @@ class MultimediaAssistantTool(BaseTool):
         try:
             if youtube_url:
                 logger.info(f"Transcribing YouTube video: {youtube_url}")
-                
-                # STRATEGY 1: Try free YouTube Transcript API first (instant, no bot detection)
+
+                # ── STRATEGY 1: youtube-transcript-api with proxy rotation ──────
                 try:
                     from .youtube_transcript_tool import get_youtube_transcript, TRANSCRIPT_API_AVAILABLE
-                    logger.info("🎯 Attempting FREE YouTube Transcript API (no bot detection)...")
-                    logger.info(f"📦 Transcript API Available: {TRANSCRIPT_API_AVAILABLE}")
-                    
+                    logger.info("🎯 Strategy 1: YouTube Transcript API with proxy rotation...")
                     transcript = get_youtube_transcript(youtube_url, language="en")
-                    logger.info(f"📝 Transcript API Response (first 300 chars): {transcript[:300]}")
-                    
-                    # Detect any error response — check for all known error patterns
-                    # including old-format errors (pre-sentinel) for backward compatibility
+                    logger.info(f"📝 Transcript API response (first 200 chars): {transcript[:200]}")
                     is_error = (
                         len(transcript) <= 100 or
                         transcript.startswith("TRANSCRIPT_ERROR:") or
-                        transcript.startswith("Failed to fetch transcript") or
-                        transcript.startswith("Transcripts are disabled") or
-                        transcript.startswith("Video is unavailable") or
-                        transcript.startswith("YouTube Transcript API is not installed") or
-                        transcript.startswith("YouTube is blocking") or
-                        transcript.startswith("[Transcribed using FREE YouTube Transcript API") or
-                        "rate-limited" in transcript or
-                        "blocking requests" in transcript or
                         "Could not retrieve a transcript" in transcript or
-                        "is blocking requests" in transcript or
+                        "blocking requests" in transcript or
                         "cloud provider" in transcript or
                         "IP has been blocked" in transcript or
-                        "youtube.com/watch" in transcript  # error messages contain the URL
+                        "rate-limited" in transcript or
+                        "youtube.com/watch" in transcript
                     )
                     if not is_error:
-                        logger.info(f"✅ SUCCESS! Got transcript via FREE API ({len(transcript)} chars) - NO BOT DETECTION!")
-                        return f"[Transcribed using FREE YouTube Transcript API - No bot detection]\n\n{transcript}"
-                    else:
-                        logger.warning(f"⚠️ Transcript API returned error: {transcript[:200]}...")
-                        logger.info("📥 Falling back to video download method...")
-                except ImportError as e:
-                    logger.error(f"❌ YouTube Transcript API not installed: {e}")
-                    logger.info("💡 Install with: pip install youtube-transcript-api")
-                    logger.info("📥 Falling back to video download method...")
+                        logger.info(f"✅ Strategy 1 SUCCESS ({len(transcript)} chars)")
+                        return f"[Transcript via YouTube API]\n\n{transcript}"
+                    logger.warning(f"⚠️ Strategy 1 failed: {transcript[:150]}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Transcript API failed: {e}")
-                    logger.info("📥 Falling back to video download method...")
-                
-                # STRATEGY 2: Fall back to video download with bot bypass
-                logger.info("🎬 Using video download method with bot bypass...")
+                    logger.warning(f"⚠️ Strategy 1 exception: {e}")
+
+                # ── STRATEGY 2: yt-dlp subtitle/caption download (no audio, no proxy needed) ──
+                try:
+                    logger.info("🎯 Strategy 2: yt-dlp subtitle download (no audio download)...")
+                    subtitle_text = self._download_subtitles(youtube_url)
+                    if subtitle_text and len(subtitle_text) > 100:
+                        logger.info(f"✅ Strategy 2 SUCCESS ({len(subtitle_text)} chars)")
+                        return f"[Transcript via YouTube Subtitles]\n\n{subtitle_text}"
+                    logger.warning("⚠️ Strategy 2: no subtitles available")
+                except Exception as e:
+                    logger.warning(f"⚠️ Strategy 2 exception: {e}")
+
+                # ── STRATEGY 3: Full audio download + Whisper (last resort) ─────
+                logger.info("🎬 Strategy 3: Audio download + Whisper transcription...")
                 config = BotBypassConfig.from_env()
                 bypass_manager = BotBypassManager(config)
-                
                 manager = StreamingTranscriptionManager(
-                    segment_time=120,  # 2-minute chunks for better context
+                    segment_time=120,
                     bypass_manager=bypass_manager
                 )
-                
                 return manager.run(youtube_url, is_url=True)
                 
             elif media_path and os.path.exists(media_path):
@@ -1101,6 +1091,58 @@ class MultimediaAssistantTool(BaseTool):
         except Exception as e:
             logger.error(f"Multimedia tool error: {str(e)}")
             return f"Multimedia Critical Error: {str(e)}"
+
+    def _download_subtitles(self, youtube_url: str) -> str:
+        """Download auto-generated or manual subtitles via yt-dlp.
+
+        Subtitle endpoints are far less aggressively blocked than video streams —
+        this works without a proxy in most cases.
+        """
+        import tempfile
+        import glob as _glob
+        import re as _re
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ydl_opts = {
+                'skip_download': True,
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['en', 'en-US', 'en-GB'],
+                'subtitlesformat': 'vtt',
+                'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
+                'quiet': True,
+                'no_warnings': False,
+            }
+
+            # Use proxy if available
+            proxy_list_str = os.environ.get("WEBSHARE_PROXY_LIST", "").strip()
+            if proxy_list_str:
+                proxies = [p.strip() for p in proxy_list_str.split(",") if p.strip()]
+                if proxies:
+                    ydl_opts['proxy'] = proxies[0]
+            elif os.environ.get("WEBSHARE_PROXY_URL", "").strip():
+                ydl_opts['proxy'] = os.environ["WEBSHARE_PROXY_URL"].strip()
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+
+            vtt_files = _glob.glob(os.path.join(tmpdir, "*.vtt"))
+            if not vtt_files:
+                return ""
+
+            text_lines = []
+            seen = set()
+            with open(vtt_files[0], 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('WEBVTT') or '-->' in line or line.startswith('NOTE'):
+                        continue
+                    line = _re.sub(r'<[^>]+>', '', line).strip()
+                    if line and line not in seen:
+                        seen.add(line)
+                        text_lines.append(line)
+
+            return ' '.join(text_lines)
 
 # Alias for backward compatibility if needed in crew/yaml
 YouTubeVideoDownloaderTool = MultimediaAssistantTool
