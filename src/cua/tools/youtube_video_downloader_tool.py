@@ -406,6 +406,12 @@ class BotBypassManager:
             'skip_unavailable_fragments': True,
         }
         
+        # Add proxy if configured via env var (helps bypass cloud IP blocks on Render/Railway)
+        proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+        if proxy_url:
+            options['proxy'] = proxy_url
+            logger.info("Using WEBSHARE_PROXY_URL for yt-dlp request")
+        
         # Add cookies if available
         if self.cookie_manager.has_cookies():
             cookie_path = self.cookie_manager.get_cookie_path()
@@ -573,6 +579,8 @@ class StreamingTranscriptionManager:
     
     def _try_alternative_extraction(self, source: str) -> str:
         """Try alternative extraction methods when bot detection occurs"""
+        proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+        
         alternative_configs = [
             # Try with more flexible format selection for production
             {
@@ -600,6 +608,11 @@ class StreamingTranscriptionManager:
                 'no_warnings': True,
             }
         ]
+        
+        # Inject proxy into all configs if available
+        if proxy_url:
+            for cfg in alternative_configs:
+                cfg['proxy'] = proxy_url
         
         for i, config in enumerate(alternative_configs):
             try:

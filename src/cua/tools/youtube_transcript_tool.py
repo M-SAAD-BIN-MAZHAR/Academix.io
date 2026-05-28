@@ -2,12 +2,11 @@
 
 This tool uses the official YouTube Transcript API which:
 - Is completely free
-- Has no bot detection issues
-- Works reliably on Railway and all cloud platforms
-- Doesn't require cookies or proxies
 - Provides instant transcripts without downloading videos
+- Supports proxy routing to bypass cloud IP blocks (set WEBSHARE_PROXY_URL env var)
 """
 
+import os
 import logging
 import re
 import time
@@ -28,6 +27,19 @@ try:
 except ImportError:
     TRANSCRIPT_API_AVAILABLE = False
     logger.warning("youtube-transcript-api not installed. Install with: pip install youtube-transcript-api")
+
+
+def _get_proxy_config() -> Optional[dict]:
+    """Build proxy dict from WEBSHARE_PROXY_URL env var if set.
+    
+    Expected format: http://user:pass@proxy-host:port
+    or just: http://proxy-host:port  (for unauthenticated proxies)
+    """
+    proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+    if not proxy_url:
+        return None
+    logger.info("Using proxy for YouTube Transcript API requests")
+    return {"http": proxy_url, "https": proxy_url}
 
 
 class YouTubeTranscriptInput(BaseModel):
@@ -79,8 +91,14 @@ class YouTubeTranscriptTool(BaseTool):
             
             logger.info(f"Fetching transcript for video: {video_id}")
             
-            # Create API instance
-            api = YouTubeTranscriptApi()
+            # Build proxy config if available
+            proxies = _get_proxy_config()
+            
+            # Create API instance with optional proxy
+            if proxies:
+                api = YouTubeTranscriptApi(proxies=proxies)
+            else:
+                api = YouTubeTranscriptApi()
             
             # Try to get transcript in preferred language with retry logic
             max_retries = 3
@@ -135,8 +153,15 @@ class YouTubeTranscriptTool(BaseTool):
             logger.error(f"Transcript fetch failed: {error_msg}")
             
             # Check if it's a rate limit error
-            if "too many requests" in error_msg.lower() or "blocked" in error_msg.lower():
+            if "too many requests" in error_msg.lower() or "blocked" in error_msg.lower() or "ipblocked" in error_msg.lower() or "requestblocked" in error_msg.lower():
+                proxy_hint = (
+                    "\n5. Set the WEBSHARE_PROXY_URL environment variable on Render with a free Webshare proxy"
+                    "\n   (sign up free at webshare.io → Proxy → Free → copy one proxy URL)"
+                    if not os.environ.get("WEBSHARE_PROXY_URL")
+                    else "\n   (proxy is configured — it may be exhausted or blocked too, try rotating it)"
+                )
                 return (
+                    f"[Transcribed using FREE YouTube Transcript API - No bot detection]\n\n"
                     f"YouTube has rate-limited requests from this IP.\n\n"
                     f"Error: {error_msg}\n\n"
                     "Solutions:\n"
@@ -144,6 +169,7 @@ class YouTubeTranscriptTool(BaseTool):
                     "2. Use a different YouTube video\n"
                     "3. Configure a free proxy (Webshare offers 10 free proxies)\n"
                     "4. Contact support if this persists"
+                    f"{proxy_hint}"
                 )
             
             return (
