@@ -61,7 +61,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 # ── Health ───────────────────────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "2.0.0"}
+    return {"status": "healthy", "version": "2.1.0"}
 
 
 # ── Chat ─────────────────────────────────────────────────────────────────────

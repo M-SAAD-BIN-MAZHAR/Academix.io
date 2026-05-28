@@ -1039,8 +1039,10 @@ class MultimediaAssistantTool(BaseTool):
                     transcript = get_youtube_transcript(youtube_url, language="en")
                     logger.info(f"📝 Transcript API Response (first 300 chars): {transcript[:300]}")
                     
-                    # Check if we got a valid transcript (not an error message)
+                    # Detect any error response — check for all known error patterns
+                    # including old-format errors (pre-sentinel) for backward compatibility
                     is_error = (
+                        len(transcript) <= 100 or
                         transcript.startswith("TRANSCRIPT_ERROR:") or
                         transcript.startswith("Failed to fetch transcript") or
                         transcript.startswith("Transcripts are disabled") or
@@ -1050,7 +1052,11 @@ class MultimediaAssistantTool(BaseTool):
                         transcript.startswith("[Transcribed using FREE YouTube Transcript API") or
                         "rate-limited" in transcript or
                         "blocking requests" in transcript or
-                        len(transcript) <= 100
+                        "Could not retrieve a transcript" in transcript or
+                        "is blocking requests" in transcript or
+                        "cloud provider" in transcript or
+                        "IP has been blocked" in transcript or
+                        "youtube.com/watch" in transcript  # error messages contain the URL
                     )
                     if not is_error:
                         logger.info(f"✅ SUCCESS! Got transcript via FREE API ({len(transcript)} chars) - NO BOT DETECTION!")
