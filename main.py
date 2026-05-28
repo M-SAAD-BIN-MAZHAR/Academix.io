@@ -13,11 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from dotenv import load_dotenv
 
-# ── Load env from cua/.env ──────────────────────────────────────────────────
-load_dotenv(Path(__file__).parent.parent / ".env")
+# ── Load env ────────────────────────────────────────────────────────────────
+# Try .env in the same directory first, then one level up (local dev)
+_env_path = Path(__file__).parent / ".env"
+if not _env_path.exists():
+    _env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path)
 
 # ── Path setup ──────────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from cua.crew import Cua
@@ -48,7 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

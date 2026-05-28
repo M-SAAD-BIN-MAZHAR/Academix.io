@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: academix-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHONPATH
+        value: /app/src:/app
+    healthCheckPath: /api/health

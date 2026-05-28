@@ -22,10 +22,13 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY . .
 
 # Add src directory to Python path
-ENV PYTHONPATH=/app/src:$PYTHONPATH
+ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
+
+# Create uploads directory
+RUN mkdir -p /app/uploads
 
 # Expose port
 EXPOSE 8000
 
-# Start command - Railway will provide PORT env var
+# Start command - Render will provide PORT env var
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
