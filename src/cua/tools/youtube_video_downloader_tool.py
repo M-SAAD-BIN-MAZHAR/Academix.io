@@ -1040,11 +1040,19 @@ class MultimediaAssistantTool(BaseTool):
                     logger.info(f"📝 Transcript API Response (first 300 chars): {transcript[:300]}")
                     
                     # Check if we got a valid transcript (not an error message)
-                    if not transcript.startswith("Failed to fetch transcript") and \
-                       not transcript.startswith("Transcripts are disabled") and \
-                       not transcript.startswith("Video is unavailable") and \
-                       not transcript.startswith("YouTube Transcript API is not installed") and \
-                       len(transcript) > 100:  # Valid transcripts are usually longer
+                    is_error = (
+                        transcript.startswith("TRANSCRIPT_ERROR:") or
+                        transcript.startswith("Failed to fetch transcript") or
+                        transcript.startswith("Transcripts are disabled") or
+                        transcript.startswith("Video is unavailable") or
+                        transcript.startswith("YouTube Transcript API is not installed") or
+                        transcript.startswith("YouTube is blocking") or
+                        transcript.startswith("[Transcribed using FREE YouTube Transcript API") or
+                        "rate-limited" in transcript or
+                        "blocking requests" in transcript or
+                        len(transcript) <= 100
+                    )
+                    if not is_error:
                         logger.info(f"✅ SUCCESS! Got transcript via FREE API ({len(transcript)} chars) - NO BOT DETECTION!")
                         return f"[Transcribed using FREE YouTube Transcript API - No bot detection]\n\n{transcript}"
                     else:
