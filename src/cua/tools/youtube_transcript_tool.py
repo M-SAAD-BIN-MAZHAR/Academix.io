@@ -1,16 +1,14 @@
-"""Free YouTube transcription using YouTube Transcript API.
+"""YouTube transcription using YouTube Transcript API with proxy rotation.
 
-This tool uses the official YouTube Transcript API which:
-- Is completely free
-- Provides instant transcripts without downloading videos
-- Supports proxy routing to bypass cloud IP blocks (set WEBSHARE_PROXY_URL env var)
+Supports up to 10 Webshare proxies to bypass cloud IP blocks on Render/Railway.
+Set WEBSHARE_PROXY_LIST (comma-separated) or WEBSHARE_PROXY_URL in env vars.
 """
 
 import os
 import logging
 import re
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 
@@ -26,248 +24,198 @@ try:
     TRANSCRIPT_API_AVAILABLE = True
 except ImportError:
     TRANSCRIPT_API_AVAILABLE = False
-    logger.warning("youtube-transcript-api not installed. Install with: pip install youtube-transcript-api")
+    logger.warning("youtube-transcript-api not installed.")
 
 
-def _get_proxy_config() -> Optional[dict]:
-    """Build proxy dict from WEBSHARE_PROXY_URL env var if set.
-    
-    Expected format: http://user:pass@proxy-host:port
-    or just: http://proxy-host:port  (for unauthenticated proxies)
+# ── Proxy helpers ─────────────────────────────────────────────────────────────
+
+def _get_proxy_list() -> List[str]:
+    """Return list of proxy URLs from env vars.
+
+    Priority:
+      1. WEBSHARE_PROXY_LIST  — comma-separated list of http://user:pass@ip:port
+      2. WEBSHARE_PROXY_URL   — single proxy URL
     """
-    proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
-    if not proxy_url:
-        return None
-    logger.info("Using proxy for YouTube Transcript API requests")
+    multi = os.environ.get("WEBSHARE_PROXY_LIST", "").strip()
+    if multi:
+        proxies = [p.strip() for p in multi.split(",") if p.strip()]
+        if proxies:
+            return proxies
+
+    single = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+    if single:
+        return [single]
+
+    return []
+
+
+def _proxy_dict(proxy_url: str) -> dict:
+    """Convert a proxy URL string to a requests-style proxy dict."""
     return {"http": proxy_url, "https": proxy_url}
 
 
-class YouTubeTranscriptInput(BaseModel):
-    """Input for YouTube transcript tool."""
-    youtube_url: str = Field(..., description="YouTube video URL")
-    language: str = Field(default="en", description="Preferred transcript language code (e.g., 'en', 'es', 'fr')")
+def _safe_proxy_label(proxy_url: str) -> str:
+    """Return host:port only (no credentials) for logging."""
+    return proxy_url.split("@")[-1] if "@" in proxy_url else proxy_url
 
+
+# ── Input schema ──────────────────────────────────────────────────────────────
+
+class YouTubeTranscriptInput(BaseModel):
+    youtube_url: str = Field(..., description="YouTube video URL")
+    language: str = Field(default="en", description="Preferred transcript language code")
+
+
+# ── Tool ──────────────────────────────────────────────────────────────────────
 
 class YouTubeTranscriptTool(BaseTool):
-    """Tool for getting YouTube video transcripts using the free Transcript API.
-    
-    This tool:
-    - Uses YouTube's official Transcript API (completely free)
-    - Works on all platforms including Railway
-    - No bot detection issues
-    - No cookies or proxies needed
-    - Instant results without video download
+    """Fetches YouTube transcripts with automatic proxy rotation.
+
+    Tries each configured Webshare proxy in order. Falls back to a direct
+    (no-proxy) attempt last. This handles YouTube's cloud IP blocks on
+    Render, Railway, and similar platforms.
     """
-    
+
     name: str = "YouTube Transcript Tool"
     description: str = (
         "Get transcripts from YouTube videos using the free YouTube Transcript API. "
-        "Works reliably on all platforms without bot detection issues. "
-        "Supports multiple languages and automatic fallback."
+        "Automatically rotates through proxies to bypass cloud IP blocks."
     )
     args_schema: type[BaseModel] = YouTubeTranscriptInput
-    
+
     def _run(self, youtube_url: str, language: str = "en") -> str:
-        """Get transcript from YouTube video.
-        
-        Args:
-            youtube_url: YouTube video URL
-            language: Preferred language code (default: 'en')
-            
-        Returns:
-            Transcript text or error message
-        """
         if not TRANSCRIPT_API_AVAILABLE:
-            return (
-                "YouTube Transcript API is not installed. "
-                "Please install it with: pip install youtube-transcript-api"
-            )
-        
-        try:
-            # Extract video ID from URL
-            video_id = self._extract_video_id(youtube_url)
-            if not video_id:
-                return f"Invalid YouTube URL: {youtube_url}"
-            
-            logger.info(f"Fetching transcript for video: {video_id}")
-            
-            # Build proxy config if available
-            proxies = _get_proxy_config()
-            
-            # Create API instance with optional proxy
-            if proxies:
-                api = YouTubeTranscriptApi(proxies=proxies)
-            else:
-                api = YouTubeTranscriptApi()
-            
-            # Try to get transcript in preferred language with retry logic
-            max_retries = 3
-            retry_delay = 2  # Start with 2 seconds
-            
-            for attempt in range(max_retries):
+            return "youtube-transcript-api is not installed. Run: pip install youtube-transcript-api"
+
+        video_id = self._extract_video_id(youtube_url)
+        if not video_id:
+            return f"Invalid YouTube URL: {youtube_url}"
+
+        logger.info(f"Fetching transcript for video: {video_id}")
+
+        # Build attempt list: all proxies first, then no-proxy as last resort
+        proxy_list = _get_proxy_list()
+        attempt_proxies: List[Optional[str]] = list(proxy_list) + [None]
+
+        last_error: Optional[Exception] = None
+
+        for proxy_url in attempt_proxies:
+            label = _safe_proxy_label(proxy_url) if proxy_url else "direct (no proxy)"
+            try:
+                logger.info(f"Trying via {label}")
+                proxies = _proxy_dict(proxy_url) if proxy_url else None
+                api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
+
                 try:
-                    try:
-                        transcript_list = api.fetch(video_id, languages=[language])
-                        logger.info(f"Successfully fetched transcript in {language}")
-                    except NoTranscriptFound:
-                        # Fallback to any available transcript
-                        logger.info(f"No transcript in {language}, trying any available language")
-                        transcript_list = api.fetch(video_id)
-                        logger.info("Successfully fetched transcript in available language")
-                    
-                    # Combine all transcript segments into full text
-                    full_transcript = " ".join([snippet.text for snippet in transcript_list])
-                    
-                    # Clean up the transcript
-                    full_transcript = self._clean_transcript(full_transcript)
-                    
-                    logger.info(f"Transcript length: {len(full_transcript)} characters")
-                    return full_transcript
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    # Check if it's a rate limit error
-                    if "too many requests" in error_msg.lower() or "blocked" in error_msg.lower():
-                        if attempt < max_retries - 1:
-                            logger.warning(f"Rate limited (attempt {attempt + 1}/{max_retries}). Waiting {retry_delay}s before retry...")
-                            time.sleep(retry_delay)
-                            retry_delay *= 2  # Exponential backoff
-                            continue
-                    raise
-            
-        except TranscriptsDisabled:
+                    transcript_list = api.fetch(video_id, languages=[language])
+                except NoTranscriptFound:
+                    logger.info(f"No '{language}' transcript, falling back to any language")
+                    transcript_list = api.fetch(video_id)
+
+                full_text = " ".join(snippet.text for snippet in transcript_list)
+                full_text = self._clean_transcript(full_text)
+                logger.info(f"Transcript fetched ({len(full_text)} chars) via {label}")
+                return full_text
+
+            except (TranscriptsDisabled, VideoUnavailable) as e:
+                # Video-level error — no point trying other proxies
+                raise e
+
+            except Exception as e:
+                last_error = e
+                err_lower = str(e).lower()
+                is_ip_block = any(k in err_lower for k in [
+                    "too many requests", "blocked", "ipblocked",
+                    "requestblocked", "rate", "429",
+                ])
+                if is_ip_block:
+                    logger.warning(f"IP blocked via {label}, trying next...")
+                    time.sleep(1)
+                    continue
+                # Non-IP error (e.g. network timeout) — still try next proxy
+                logger.warning(f"Error via {label}: {e}, trying next...")
+                continue
+
+        # All attempts failed — surface a clean error
+        raise last_error or Exception("All proxy attempts failed")
+
+    # ── Exception handlers (called by BaseTool) ───────────────────────────────
+
+    def _handle_error(self, error: Exception) -> str:
+        error_msg = str(error)
+        logger.error(f"Transcript fetch failed: {error_msg}")
+
+        if isinstance(error, TranscriptsDisabled):
             return (
-                f"Transcripts are disabled for this video: {youtube_url}\n\n"
-                "This video does not have captions/subtitles available. "
-                "The video owner has either disabled captions or hasn't provided them."
+                f"Transcripts are disabled for this video.\n"
+                "The video owner has not provided captions/subtitles."
             )
-        
-        except VideoUnavailable:
+
+        if isinstance(error, VideoUnavailable):
             return (
-                f"Video is unavailable: {youtube_url}\n\n"
-                "The video may be private, deleted, or restricted in your region."
+                "Video is unavailable. It may be private, deleted, or region-restricted."
             )
-        
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Transcript fetch failed: {error_msg}")
-            
-            # Check if it's a rate limit error
-            if "too many requests" in error_msg.lower() or "blocked" in error_msg.lower() or "ipblocked" in error_msg.lower() or "requestblocked" in error_msg.lower():
-                proxy_hint = (
-                    "\n5. Set the WEBSHARE_PROXY_URL environment variable on Render with a free Webshare proxy"
-                    "\n   (sign up free at webshare.io → Proxy → Free → copy one proxy URL)"
-                    if not os.environ.get("WEBSHARE_PROXY_URL")
-                    else "\n   (proxy is configured — it may be exhausted or blocked too, try rotating it)"
+
+        err_lower = error_msg.lower()
+        is_ip_block = any(k in err_lower for k in [
+            "too many requests", "blocked", "ipblocked", "requestblocked", "rate", "429",
+        ])
+
+        if is_ip_block:
+            proxy_list = _get_proxy_list()
+            if proxy_list:
+                hint = f"All {len(proxy_list)} configured proxies were blocked. Try refreshing your Webshare proxies."
+            else:
+                hint = (
+                    "Fix: Add WEBSHARE_PROXY_LIST to your Render environment variables.\n"
+                    "Format: http://user:pass@ip:port,http://user:pass@ip2:port2,..."
                 )
-                return (
-                    f"[Transcribed using FREE YouTube Transcript API - No bot detection]\n\n"
-                    f"YouTube has rate-limited requests from this IP.\n\n"
-                    f"Error: {error_msg}\n\n"
-                    "Solutions:\n"
-                    "1. Wait 15-30 minutes and try again\n"
-                    "2. Use a different YouTube video\n"
-                    "3. Configure a free proxy (Webshare offers 10 free proxies)\n"
-                    "4. Contact support if this persists"
-                    f"{proxy_hint}"
-                )
-            
             return (
-                f"Failed to fetch transcript for {youtube_url}\n\n"
-                f"Error: {error_msg}\n\n"
-                "Possible reasons:\n"
-                "1. Video has no captions/subtitles\n"
-                "2. Video is private or restricted\n"
-                "3. Invalid video URL\n"
-                "4. Temporary YouTube API issue"
+                f"YouTube is blocking requests from this server's IP.\n\n"
+                f"{hint}\n\n"
+                f"Error detail: {error_msg}"
             )
-    
+
+        return f"Failed to fetch transcript.\n\nError: {error_msg}"
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
     def _extract_video_id(self, url: str) -> Optional[str]:
-        """Extract video ID from YouTube URL.
-        
-        Args:
-            url: YouTube URL
-            
-        Returns:
-            Video ID or None if invalid
-        """
-        # Support various YouTube URL formats
         patterns = [
             r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
             r'youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})',
         ]
-        
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
-        
-        # If URL is already just the video ID
         if re.match(r'^[a-zA-Z0-9_-]{11}$', url):
             return url
-        
         return None
-    
+
     def _clean_transcript(self, transcript: str) -> str:
-        """Clean up transcript text.
-        
-        Args:
-            transcript: Raw transcript text
-            
-        Returns:
-            Cleaned transcript
-        """
-        # Remove extra whitespace
         transcript = re.sub(r'\s+', ' ', transcript)
-        
-        # Remove common caption artifacts
-        transcript = re.sub(r'\[.*?\]', '', transcript)  # Remove [Music], [Applause], etc.
-        transcript = re.sub(r'\(.*?\)', '', transcript)  # Remove (inaudible), etc.
-        
-        # Clean up spacing
-        transcript = transcript.strip()
-        
-        return transcript
-    
+        transcript = re.sub(r'\[.*?\]', '', transcript)
+        transcript = re.sub(r'\(.*?\)', '', transcript)
+        return transcript.strip()
+
     def get_available_languages(self, youtube_url: str) -> List[str]:
-        """Get list of available transcript languages for a video.
-        
-        Args:
-            youtube_url: YouTube video URL
-            
-        Returns:
-            List of available language codes
-        """
         if not TRANSCRIPT_API_AVAILABLE:
             return []
-        
         try:
             video_id = self._extract_video_id(youtube_url)
             if not video_id:
                 return []
-            
-            api = YouTubeTranscriptApi()
-            transcript_list = api.list(video_id)
-            languages = []
-            
-            for transcript in transcript_list:
-                languages.append(transcript.language_code)
-            
-            return languages
+            proxy_list = _get_proxy_list()
+            proxies = _proxy_dict(proxy_list[0]) if proxy_list else None
+            api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
+            return [t.language_code for t in api.list(video_id)]
         except Exception as e:
             logger.error(f"Failed to get available languages: {e}")
             return []
 
 
+# ── Convenience function ──────────────────────────────────────────────────────
+
 def get_youtube_transcript(youtube_url: str, language: str = "en") -> str:
-    """Convenience function to get YouTube transcript.
-    
-    Args:
-        youtube_url: YouTube video URL
-        language: Preferred language code (default: 'en')
-        
-    Returns:
-        Transcript text or error message
-    """
-    tool = YouTubeTranscriptTool()
-    return tool._run(youtube_url=youtube_url, language=language)
+    return YouTubeTranscriptTool()._run(youtube_url=youtube_url, language=language)

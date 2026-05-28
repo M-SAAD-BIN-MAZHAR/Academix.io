@@ -407,10 +407,21 @@ class BotBypassManager:
         }
         
         # Add proxy if configured via env var (helps bypass cloud IP blocks on Render/Railway)
-        proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+        # Supports WEBSHARE_PROXY_LIST (comma-separated) or WEBSHARE_PROXY_URL (single)
+        proxy_url = None
+        proxy_list_str = os.environ.get("WEBSHARE_PROXY_LIST", "").strip()
+        if proxy_list_str:
+            proxies = [p.strip() for p in proxy_list_str.split(",") if p.strip()]
+            if proxies:
+                # Rotate through proxies based on attempt number
+                proxy_url = proxies[attempt % len(proxies)]
+        if not proxy_url:
+            proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip() or None
+
         if proxy_url:
             options['proxy'] = proxy_url
-            logger.info("Using WEBSHARE_PROXY_URL for yt-dlp request")
+            host = proxy_url.split("@")[-1] if "@" in proxy_url else proxy_url
+            logger.info(f"Using proxy for yt-dlp: {host}")
         
         # Add cookies if available
         if self.cookie_manager.has_cookies():
